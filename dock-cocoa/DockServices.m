@@ -1,4 +1,5 @@
 #import "DockServices.h"
+#import "DockServer.h"
 #import <xpc/xpc.h>
 #import <mach/mach.h>
 #import <servers/bootstrap.h>
@@ -28,7 +29,7 @@ static void xpc(const char *name)
 + (void)checkInServer
 {
 	mach_port_t p = MACH_PORT_NULL; (void)bootstrap_check_in(bootstrap_port, "EyeCandyDiagnose", &p);
-	p = MACH_PORT_NULL; (void)bootstrap_check_in(bootstrap_port, "com.apple.dock.server", &p);
+	DockServerStart("com.apple.dock.server");      /* the real Dock checks in here (dtrace); ours receives and logs for now */
 	xpc("com.apple.coreservices.appleevents"); xpc("com.apple.usernoted.dock");
 	xpc("com.apple.coreservices.sharedfilelistd.xpc"); xpc("com.apple.backgroundtaskmanagement"); xpc("com.apple.trustd.agent");
 	xpc("com.apple.iconservices"); xpc("com.apple.iconservices.store"); xpc("com.apple.dmd.policy");
