@@ -14,5 +14,12 @@ const SkyLightAPI *SkyLightLoad(void)
 	api.SetWindowLevel = dlsym(h, "SLSSetWindowLevel");
 	api.OrderWindow = dlsym(h, "SLSOrderWindow");
 	api.ReleaseWindow = dlsym(h, "SLSReleaseWindow");
+	api.MainDisplayID = dlsym(h, "SLSMainDisplayID");
+	api.GetDisplayBounds = dlsym(h, "SLSGetDisplayBounds");
+	api.GetDisplayMenubarHeight = dlsym(h, "SLSGetDisplayMenubarHeight");
+	api.TransactionCreate = dlsym(h, "SLSTransactionCreate");
+	api.TransactionSetWindowLevel = dlsym(h, "SLSTransactionSetWindowLevel");
+	api.TransactionOrderWindow = dlsym(h, "SLSTransactionOrderWindow");
+	api.TransactionCommit = dlsym(h, "SLSTransactionCommit");
 	return api.MainConnectionID ? &api : NULL;
 }

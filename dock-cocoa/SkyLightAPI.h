@@ -13,6 +13,13 @@ typedef struct {
 	CGError (*SetWindowLevel)(SLCid cid, SLWid wid, int level);                                                         /* same shape as in our SkyLight/include/SkyLight.h */
 	CGError (*OrderWindow)(SLCid cid, SLWid wid, int mode, SLWid relativeTo);                                           /* UNVERIFIED prototype */
 	CGError (*ReleaseWindow)(SLCid cid, SLWid wid);                                                                     /* UNVERIFIED prototype */
+	uint32_t (*MainDisplayID)(void);                                                                                    /* verified on 26.7.2 (returned 1535231424) */
+	CGError (*GetDisplayBounds)(uint32_t display, CGRect *bounds);                                                      /* verified: 0 0 1280 800 */
+	CGError (*GetDisplayMenubarHeight)(uint32_t display, uint32_t *height);                                             /* verified: 30 */
+	CFTypeRef (*TransactionCreate)(SLCid cid);                                                                          /* verified: returns an object (CF type) */
+	CGError (*TransactionSetWindowLevel)(CFTypeRef tx, SLWid wid, int level);                                           /* UNVERIFIED prototype (checked by the window list) */
+	CGError (*TransactionOrderWindow)(CFTypeRef tx, SLWid wid, int mode, SLWid relativeTo);                             /* UNVERIFIED prototype */
+	CGError (*TransactionCommit)(CFTypeRef tx, int synchronous);                                                        /* UNVERIFIED prototype */
 } SkyLightAPI;
 /* returns NULL when SkyLight cannot be loaded */
 const SkyLightAPI *SkyLightLoad(void);

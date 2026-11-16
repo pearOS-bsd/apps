@@ -1,7 +1,7 @@
 #import "DockWindow.h"
 #import "SkyLightAPI.h"
 @implementation DockWindow
-{ const SkyLightAPI *sl; SLCid cid; }
+{ const SkyLightAPI *sl; SLCid cid; int _level; }
 - (instancetype)initWithFrame:(CGRect)frame level:(int)level
 {
 	if (!(self = [super init])) return nil;
@@ -16,8 +16,24 @@
 	if (region) CFRelease(region); if (opaque) CFRelease(opaque);
 	if (e != kCGErrorSuccess || !wid) return nil;
 	_windowID = wid;
-	if (sl->SetWindowLevel) sl->SetWindowLevel(cid, wid, level);
+	_level = level;
 	return self;
 }
-- (void)orderIn { if (sl && sl->OrderWindow && _windowID) sl->OrderWindow(cid, _windowID, 1 /* above */, 0); }
++ (CGRect)mainDisplayBounds
+{
+	const SkyLightAPI *a = SkyLightLoad(); CGRect b = CGRectMake(0, 0, 1280, 800);
+	if (a && a->MainDisplayID && a->GetDisplayBounds) a->GetDisplayBounds(a->MainDisplayID(), &b);
+	return b;
+}
+/* level and order through a transaction, like the real Dock (SLSTransactionCreate, SetWindowLevel, OrderWindow, Commit) */
+- (void)orderIn
+{
+	if (!sl || !_windowID) return;
+	if (sl->TransactionCreate && sl->TransactionSetWindowLevel && sl->TransactionOrderWindow && sl->TransactionCommit) {
+		CFTypeRef tx = sl->TransactionCreate(cid);
+		if (tx) { sl->TransactionSetWindowLevel(tx, _windowID, _level); sl->TransactionOrderWindow(tx, _windowID, 1 /* above */, 0); sl->TransactionCommit(tx, 1); CFRelease(tx); return; }
+	}
+	if (sl->SetWindowLevel) sl->SetWindowLevel(cid, _windowID, _level);
+	if (sl->OrderWindow) sl->OrderWindow(cid, _windowID, 1, 0);
+}
 @end

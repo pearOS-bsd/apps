@@ -16,7 +16,8 @@ int main(int argc, const char *argv[])
 		[prefs readSystemKeys];
 		[DockServices checkInServer];
 		/* the window (DOCK_WINDOW=seconds keeps the process alive that long, for the checks on the Mac VM) */
-		DockWindow *win = [[DockWindow alloc] initWithFrame: CGRectMake(300, 4, 700, 80) level: 20];
+		CGRect disp = [DockWindow mainDisplayBounds]; CGFloat bw = 700, bh = 80;
+		DockWindow *win = [[DockWindow alloc] initWithFrame: CGRectMake(disp.origin.x + (disp.size.width - bw) / 2, disp.origin.y + disp.size.height - bh - 5, bw, bh) level: 20];      /* centred at the bottom: SkyLight window origins are top-left based (checked with the window list) */
 		[win orderIn];
 		if (getenv("DOCK_LOG")) NSLog(@"dock: window id %u", win.windowID);
 		if (getenv("DOCK_WINDOW")) {
