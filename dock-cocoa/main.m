@@ -3,6 +3,8 @@
 #import <Foundation/Foundation.h>
 #import "DockPrefs.h"
 #import "DockServices.h"
+#import "DockWindow.h"
+#import <CoreGraphics/CoreGraphics.h>
 int main(int argc, const char *argv[])
 {
 	@autoreleasepool {
@@ -13,6 +15,16 @@ int main(int argc, const char *argv[])
 		DockPrefs *prefs = [[DockPrefs alloc] initFromPreferences];
 		[prefs readSystemKeys];
 		[DockServices checkInServer];
+		/* the window (DOCK_WINDOW=seconds keeps the process alive that long, for the checks on the Mac VM) */
+		DockWindow *win = [[DockWindow alloc] initWithFrame: CGRectMake(300, 4, 700, 80) level: 20];
+		[win orderIn];
+		if (getenv("DOCK_LOG")) NSLog(@"dock: window id %u", win.windowID);
+		if (getenv("DOCK_WINDOW")) {
+			CFArrayRef l = CGWindowListCopyWindowInfo(kCGWindowListOptionAll, kCGNullWindowID);
+			for (NSDictionary *w in (__bridge NSArray *)l) if ([w[(id)kCGWindowOwnerPID] intValue] == getpid()) NSLog(@"dock: my window %@ level %@ bounds %@", w[(id)kCGWindowNumber], w[(id)kCGWindowLayer], w[(id)kCGWindowBounds]);
+			if (l) CFRelease(l);
+			[NSThread sleepForTimeInterval: atof(getenv("DOCK_WINDOW"))];
+		}
 		if (getenv("DOCK_LOG")) NSLog(@"dock: %lu preference keys set", (unsigned long)prefs.values.count);
 		(void)argc; (void)argv;
 	}

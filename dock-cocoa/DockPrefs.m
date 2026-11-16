@@ -26,6 +26,9 @@
 - (void)readSystemKeys
 {
 	CFPropertyListRef v;
+	/* the first two the real Dock reads before anything else (language of the session, App Nap delay); the global domain is our reading, the trace logs the key only */
+	v = CFPreferencesCopyAppValue(CFSTR("AppleLanguages"), kCFPreferencesAnyApplication); if (v) CFRelease(v);
+	v = CFPreferencesCopyAppValue(CFSTR("NSAppNapLaunchDelay"), kCFPreferencesAnyApplication); if (v) CFRelease(v);
 	v = CFPreferencesCopyAppValue(CFSTR("IIOEnableOOP"), kCFPreferencesCurrentApplication); if (v) CFRelease(v);
 	for (NSString *k in @[ @"Session Language", @"Additional Languages", @"Assistant Enabled" ]) {
 		v = CFPreferencesCopyAppValue((__bridge CFStringRef)k, CFSTR("com.apple.assistant.support")); if (v) CFRelease(v);
