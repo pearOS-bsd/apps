@@ -198,10 +198,15 @@ static NSString *TileLabel(NSDictionary *t, NSString *path)
 - (NSMutableDictionary *)tileForPath:(NSString *)path label:(NSString *)label
 {
 	NSString *u = [@"file://" stringByAppendingString: [path stringByAddingPercentEncodingWithAllowedCharacters: [NSCharacterSet URLPathAllowedCharacterSet]]];
-	return [@{ @"GUID": @(arc4random()), @"tile-type": @"file-tile", @"tile-data": @{ @"file-data": @{ @"_CFURLString": [u stringByAppendingString: @"/"], @"_CFURLStringType": @15 }, @"file-label": label ?: [[path lastPathComponent] stringByDeletingPathExtension], @"file-type": @41, @"dock-extra": @NO } } mutableCopy];
+	/* the shape of a tile of the real Dock (docs/development/DOCK-CONFIG.md, read from the Mac): bundle-identifier, dock-extra and is-beta are in every file-tile */
+	NSMutableDictionary *td = [@{ @"file-data": @{ @"_CFURLString": [u stringByAppendingString: @"/"], @"_CFURLStringType": @15 }, @"file-label": label ?: [[path lastPathComponent] stringByDeletingPathExtension], @"file-type": @41, @"dock-extra": @NO, @"is-beta": @NO } mutableCopy];
+	NSString *bid = [NSDictionary dictionaryWithContentsOfFile: [path stringByAppendingPathComponent: @"Contents/Info.plist"]][@"CFBundleIdentifier"];
+	if ([bid length]) td[@"bundle-identifier"] = bid;
+	return [@{ @"GUID": @(arc4random()), @"tile-type": @"file-tile", @"tile-data": td } mutableCopy];
 }
 - (void)savePrefs
 {
+	prefs[@"version"] = @1;                 /* the real Dock builds no tiles from a file without version = 1 */
 	{ NSMutableArray *save = [NSMutableArray array]; for (NSDictionary *t in apps) if (![TilePath(t) hasSuffix: @"/Finder.app"] && ![TilePath(t) hasSuffix: @"/Apps.app"]) [save addObject: t]; prefs[@"persistent-apps"] = save; } prefs[@"persistent-others"] = others;
 	NSString *dir = [[self prefsPath] stringByDeletingLastPathComponent]; [[NSFileManager defaultManager] createDirectoryAtPath: dir withIntermediateDirectories: YES attributes: nil error: NULL];
 	[prefs writeToFile: [self prefsPath] atomically: YES];
