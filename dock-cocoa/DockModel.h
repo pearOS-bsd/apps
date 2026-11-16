@@ -9,6 +9,7 @@
 @end
 @interface DockModel : NSObject
 @property (readonly) NSArray<DockTile *> *tiles;
+@property (readonly) int tileSize;                    /* after shrinking to fit the display */
 @property (readonly) CGRect barRect;                 /* in window coordinates, origin top-left, window = the display */
 - (instancetype)initWithPrefs:(DockPrefs *)prefs displayBounds:(CGRect)display;
 @end

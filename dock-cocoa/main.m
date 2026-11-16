@@ -22,7 +22,7 @@ int main(int argc, const char *argv[])
 		DockModel *model = [[DockModel alloc] initWithPrefs: prefs displayBounds: disp];
 		DockWindow *win = [[DockWindow alloc] initWithFrame: disp level: 20];
 		[win orderIn];
-		if (getenv("DOCK_LOG")) NSLog(@"dock: window id %u, %lu tiles, bar %@", win.windowID, (unsigned long)model.tiles.count, NSStringFromRect(NSRectFromCGRect(model.barRect)));
+		if (getenv("DOCK_LOG")) NSLog(@"dock: window id %u, %lu tiles, tilesize %d, bar %@", win.windowID, (unsigned long)model.tiles.count, model.tileSize, NSStringFromRect(NSRectFromCGRect(model.barRect)));
 		if (getenv("DOCK_WINDOW")) {
 			CFArrayRef l = CGWindowListCopyWindowInfo(kCGWindowListOptionAll, kCGNullWindowID);
 			for (NSDictionary *w in (__bridge NSArray *)l) if ([w[(id)kCGWindowOwnerPID] intValue] == getpid()) NSLog(@"dock: my window %@ level %@ bounds %@", w[(id)kCGWindowNumber], w[(id)kCGWindowLayer], w[(id)kCGWindowBounds]);

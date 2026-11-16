@@ -7,3 +7,6 @@ Dock.app/Contents/MacOS/Dock: main.m DockPrefs.m DockServices.m DockWindow.m Sky
 	mkdir -p Dock.app/Contents/Resources && cp -R Resources/en.lproj Dock.app/Contents/Resources/
 clean:
 	rm -rf Dock.app
+check:
+	$(CC) -O1 -o layout_check test/layout_check.c ../dock/dock_layout.c -lm && ./layout_check; rm -f layout_check
+.PHONY: check
