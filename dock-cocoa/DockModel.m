@@ -41,6 +41,8 @@ static DockTile *TileFromDict(NSDictionary *d, int kind)
 		m.tilesize--; if (m.largesize < m.tilesize) m.largesize = m.tilesize;
 	}
 	_tileSize = m.tilesize;
+	CGFloat barTop = display.origin.y + display.size.height - bar.bar_h - bar.bottom_margin;
+	for (NSUInteger i = 0; i < n; i++) { list[i].frame = CGRectMake(display.origin.x + slots[i].x, barTop, slots[i].w, bar.bar_h); list[i].art = slots[i].art; }
 	_barRect = CGRectMake(display.origin.x + bar.bar_x, display.origin.y + display.size.height - bar.bar_h - bar.bottom_margin, bar.bar_w, bar.bar_h);
 	free(items); free(slots);
 	return self;

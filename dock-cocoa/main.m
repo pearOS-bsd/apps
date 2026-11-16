@@ -5,6 +5,7 @@
 #import "DockServices.h"
 #import "DockWindow.h"
 #import "DockModel.h"
+#import "DockView.h"
 #import <CoreGraphics/CoreGraphics.h>
 int main(int argc, const char *argv[])
 {
@@ -22,12 +23,13 @@ int main(int argc, const char *argv[])
 		DockModel *model = [[DockModel alloc] initWithPrefs: prefs displayBounds: disp];
 		DockWindow *win = [[DockWindow alloc] initWithFrame: disp level: 20];
 		[win orderIn];
+		[win setRootLayer: DockBuildLayers(model, disp.size)];
 		if (getenv("DOCK_LOG")) NSLog(@"dock: window id %u, %lu tiles, tilesize %d, bar %@", win.windowID, (unsigned long)model.tiles.count, model.tileSize, NSStringFromRect(NSRectFromCGRect(model.barRect)));
 		if (getenv("DOCK_WINDOW")) {
 			CFArrayRef l = CGWindowListCopyWindowInfo(kCGWindowListOptionAll, kCGNullWindowID);
 			for (NSDictionary *w in (__bridge NSArray *)l) if ([w[(id)kCGWindowOwnerPID] intValue] == getpid()) NSLog(@"dock: my window %@ level %@ bounds %@", w[(id)kCGWindowNumber], w[(id)kCGWindowLayer], w[(id)kCGWindowBounds]);
 			if (l) CFRelease(l);
-			[NSThread sleepForTimeInterval: atof(getenv("DOCK_WINDOW"))];
+			for (double t = 0; t < atof(getenv("DOCK_WINDOW")); t += 0.1) [[NSRunLoop currentRunLoop] runUntilDate: [NSDate dateWithTimeIntervalSinceNow: 0.1]];
 		}
 		if (getenv("DOCK_LOG")) NSLog(@"dock: %lu preference keys set", (unsigned long)prefs.values.count);
 		(void)argc; (void)argv;

@@ -1,8 +1,8 @@
 # make          builds ./Dock.app (a bundle like the real one: Contents/Info.plist with LSUIElement, Contents/MacOS/Dock), with the host's Foundation
 # The real Dock does not link AppKit; neither do we.  A bare executable (no Info.plist) makes the system connect to services the real Dock does not touch at startup.
-Dock.app/Contents/MacOS/Dock: main.m DockPrefs.m DockServices.m DockWindow.m SkyLightAPI.m DockModel.m ../dock/dock_layout.c DockPrefs.h DockServices.h DockWindow.h SkyLightAPI.h Info.plist Resources/en.lproj/Localizable.strings
+Dock.app/Contents/MacOS/Dock: main.m DockPrefs.m DockServices.m DockWindow.m SkyLightAPI.m DockModel.m DockView.m ../dock/dock_layout.c DockPrefs.h DockServices.h DockWindow.h SkyLightAPI.h Info.plist Resources/en.lproj/Localizable.strings
 	mkdir -p Dock.app/Contents/MacOS
-	clang -fobjc-arc -Wall -O1 -o $@ main.m DockPrefs.m DockServices.m DockWindow.m SkyLightAPI.m DockModel.m ../dock/dock_layout.c -framework Foundation -framework CoreFoundation -framework CoreGraphics
+	clang -fobjc-arc -Wall -O1 -o $@ main.m DockPrefs.m DockServices.m DockWindow.m SkyLightAPI.m DockModel.m DockView.m ../dock/dock_layout.c -framework Foundation -framework CoreFoundation -framework CoreGraphics -framework QuartzCore
 	cp Info.plist Dock.app/Contents/Info.plist
 	mkdir -p Dock.app/Contents/Resources && cp -R Resources/en.lproj Dock.app/Contents/Resources/
 clean:
