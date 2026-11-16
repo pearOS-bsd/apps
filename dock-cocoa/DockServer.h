@@ -3,3 +3,5 @@
  * Dock to minimize a window); no reply is sent yet. */
 #import <Foundation/Foundation.h>
 void DockServerStart(const char *serviceName);
+typedef void (^DockMinimizeHandler)(uint32_t windowID, NSString *title, BOOL animate);
+void DockServerSetMinimizeHandler(DockMinimizeHandler h);       /* called on the main queue for message 96508 */

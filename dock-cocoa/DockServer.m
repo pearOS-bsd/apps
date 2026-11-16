@@ -1,4 +1,5 @@
 #import "DockServer.h"
+#import "DockAlea.h"
 #import <mach/mach.h>
 #import <servers/bootstrap.h>
 #import <dispatch/dispatch.h>
@@ -18,6 +19,8 @@ static void logMessage(const char *service, mach_msg_header_t *h, size_t total)
 	fprintf(f, "%s: id %d size %u bits 0x%x remote %u local %u total %zu\n   ", service, h->msgh_id, h->msgh_size, h->msgh_bits, h->msgh_remote_port, h->msgh_local_port, total);
 	const unsigned char *b = (const unsigned char *)h; for (size_t i = 0; i < total && i < 160; i++) { fprintf(f, "%02x", b[i]); if (i % 4 == 3) fputc(' ', f); } fputc('\n', f); fclose(f);
 }
+static DockMinimizeHandler minimizeHandler;
+void DockServerSetMinimizeHandler(DockMinimizeHandler h) { minimizeHandler = [h copy]; }
 void DockServerStart(const char *name)
 {
 	mach_port_t port = MACH_PORT_NULL; kern_return_t kr = bootstrap_check_in(bootstrap_port, name, &port);
@@ -31,6 +34,7 @@ void DockServerStart(const char *name)
 		logMessage(service, &m.h, m.h.msgh_size);
 		if ((m.h.msgh_bits & MACH_MSGH_BITS_COMPLEX) && m.h.msgh_size >= 24 + 4 + 16) {       /* an out-of-line descriptor: keep the data for reading (/tmp/dock-ool-<id>-<n>.bin) */
 			mach_msg_body_t *body = (mach_msg_body_t *)(&m.h + 1); mach_msg_ool_descriptor_t *d = (mach_msg_ool_descriptor_t *)(body + 1);
+			if (m.h.msgh_id == 96508 && d->address && minimizeHandler) { NSString *t = nil; NSData *nd = [NSData dataWithBytes: d->address length: MIN(d->size, 4096)]; DockMinimizeRequest q = DockParseMinimize(nd, &t); if (q.ok) minimizeHandler(q.windowID, t ?: @"", q.animate); }
 			if (access("/tmp/dock-server.debug", F_OK) == 0 && body->msgh_descriptor_count >= 1 && d->type == MACH_MSG_OOL_DESCRIPTOR && d->address) {
 				static int n; char path[96]; snprintf(path, sizeof path, "/tmp/dock-ool-%d-%d.bin", m.h.msgh_id, n++); FILE *f = fopen(path, "w"); if (f) { fwrite(d->address, 1, d->size, f); fclose(f); }
 			}

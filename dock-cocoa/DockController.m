@@ -3,6 +3,8 @@
 #import "DockWallpaper.h"
 #import "DockHover.h"
 #import "DockInput.h"
+#import "DockServer.h"
+#import "SkyLightAPI.h"
 #import "../dock/dock_layout.h"
 @implementation DockController
 { DockWindow *win, *wall; DockHover *hover; DockInput *input; NSTimer *refresh; NSString *signature; }
@@ -18,6 +20,11 @@
 	[win orderIn]; [wall orderIn];
 	[wall setRootLayer: DockWallpaperLayer(_display.size)];
 	_root = DockBuildLayers(_model, _display.size); [win setRootLayer: _root];
+	DockServerSetMinimizeHandler(^(uint32_t wid, NSString *title, BOOL animate) {
+		/* EXPERIMENT 1: can this Dock order out a window of another process? (the real one does; it has private SkyLight entitlements) */
+		const SkyLightAPI *sl = SkyLightLoad(); int cid = sl ? sl->MainConnectionID() : 0; CFTypeRef tx = sl && sl->TransactionCreate ? sl->TransactionCreate(cid) : NULL;
+		if (tx) { sl->TransactionOrderWindow(tx, wid, 0 /* out */, 0); CGError e = sl->TransactionCommit(tx, 1); CFRelease(tx); NSLog(@"dock: minimize request window %u \"%@\" animate %d -> order out: error %d", wid, title, animate, e); }
+	});
 	hover = [[DockHover alloc] initWithController: self];
 	input = [[DockInput alloc] initWithController: self];
 	/* running applications and badges change while the Dock runs: look again every 1.5 s (SCAFFOLDING: the real Dock is told by LaunchServices / usernoted) */
