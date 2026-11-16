@@ -4,6 +4,7 @@
 #import "DockHover.h"
 #import "DockInput.h"
 #import "DockServer.h"
+#import "DockNotify.h"
 #import "SkyLightAPI.h"
 #import "../dock/dock_layout.h"
 @implementation DockController
@@ -20,6 +21,7 @@
 	[win orderIn]; [wall orderIn];
 	[wall setRootLayer: DockWallpaperLayer(_display.size)];
 	_root = DockBuildLayers(_model, _display.size); [win setRootLayer: _root];
+	if (getenv("DOCK_NOTIFY")) DockNotifyStart();       /* experiment: registers ~1500 notification types, logs them; off by default */
 	DockServerSetMinimizeHandler(^(uint32_t wid, NSString *title, BOOL animate) {
 		/* EXPERIMENT 1: can this Dock order out a window of another process? (the real one does; it has private SkyLight entitlements) */
 		const SkyLightAPI *sl = SkyLightLoad(); int cid = sl ? sl->MainConnectionID() : 0; CFTypeRef tx = sl && sl->TransactionCreate ? sl->TransactionCreate(cid) : NULL;

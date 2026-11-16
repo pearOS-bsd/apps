@@ -21,5 +21,9 @@ const SkyLightAPI *SkyLightLoad(void)
 	api.TransactionSetWindowLevel = dlsym(h, "SLSTransactionSetWindowLevel");
 	api.TransactionOrderWindow = dlsym(h, "SLSTransactionOrderWindow");
 	api.TransactionCommit = dlsym(h, "SLSTransactionCommit");
+	api.RegisterConnectionNotifyProc = dlsym(h, "SLSRegisterConnectionNotifyProc");
+	api.SetUniversalOwner = dlsym(h, "SLSSetUniversalOwner");
+	api.EnableWindowModificationNotifications = dlsym(h, "SLSPackagesEnableConnectionWindowModificationNotifications");
+	api.EnableOcclusionNotifications = dlsym(h, "SLSPackagesEnableConnectionOcclusionNotifications");
 	return api.MainConnectionID ? &api : NULL;
 }

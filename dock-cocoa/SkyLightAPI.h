@@ -20,6 +20,10 @@ typedef struct {
 	CGError (*TransactionSetWindowLevel)(CFTypeRef tx, SLWid wid, int level);                                           /* UNVERIFIED prototype (checked by the window list) */
 	CGError (*TransactionOrderWindow)(CFTypeRef tx, SLWid wid, int mode, SLWid relativeTo);                             /* UNVERIFIED prototype */
 	CGError (*TransactionCommit)(CFTypeRef tx, int synchronous);                                                        /* UNVERIFIED prototype */
+	CGError (*RegisterConnectionNotifyProc)(SLCid cid, void (*proc)(uint32_t type, void *data, size_t length, void *context, SLCid cid), uint32_t type, void *context);   /* shape from the real Dock's calls (dtrace: cid, proc, type, ctx); the callback's parameters are a GUESS (community prototype) */
+	CGError (*SetUniversalOwner)(SLCid cid);                                                                           /* called once by the real Dock; second argument unknown */
+	CGError (*EnableWindowModificationNotifications)(SLCid cid, int enable);                                           /* SLSPackagesEnableConnectionWindowModificationNotifications */
+	CGError (*EnableOcclusionNotifications)(SLCid cid, int enable);                                                    /* SLSPackagesEnableConnectionOcclusionNotifications */
 } SkyLightAPI;
 /* returns NULL when SkyLight cannot be loaded */
 const SkyLightAPI *SkyLightLoad(void);
