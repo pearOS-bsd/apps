@@ -19,3 +19,7 @@ Two facts that shaped the design: the real Dock **does not link AppKit** (it lin
 
 ## Window (2026-11-16, Mac VM 26.7.2)
 Created with `SLSNewWindowWithOpaqueShapeAndContext` (type **2**; 0 and 1 return error 1000), level and order set through `SLSTransaction*`. `CGWindowListCopyWindowInfo` shows our window at X 290, Y 715, 700 x 80, level 20 (the Dock level) on a 1280 x 800 display: centred at the bottom, no AppKit. No content is drawn yet (no layer context). Prototypes in `SkyLightAPI.h` are marked verified or not.
+
+## What the real Dock's windows look like (Mac VM, CGWindowListCopyWindowInfo, 2026-11-16)
+Two windows owned by `Dock`, both 1280 x 800 at 0,0 (the whole display): one at layer 20 (the bar is drawn inside it) and one at layer -2147483624 (just below the desktop-icon level: the wallpaper). So ours is one display-sized window at level 20 (`DockWindow`), the wallpaper window comes later.
+`DockModel` builds the tile list from the preferences (Finder, persistent-apps, separator, persistent-others, Trash) and the bar rectangle through `../dock/dock_layout.c` (measured on the real Dock). With this Mac's 18 apps it gives 22 tiles and a bar 1345.5 wide on a 1280 display: **too wide**; the real Dock shrinks the tiles until the bar fits, and that rule is not implemented yet (needs a screenshot of the real Dock to measure; the Mac VM screen must be unlocked).

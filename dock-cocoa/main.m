@@ -4,6 +4,7 @@
 #import "DockPrefs.h"
 #import "DockServices.h"
 #import "DockWindow.h"
+#import "DockModel.h"
 #import <CoreGraphics/CoreGraphics.h>
 int main(int argc, const char *argv[])
 {
@@ -16,10 +17,12 @@ int main(int argc, const char *argv[])
 		[prefs readSystemKeys];
 		[DockServices checkInServer];
 		/* the window (DOCK_WINDOW=seconds keeps the process alive that long, for the checks on the Mac VM) */
-		CGRect disp = [DockWindow mainDisplayBounds]; CGFloat bw = 700, bh = 80;
-		DockWindow *win = [[DockWindow alloc] initWithFrame: CGRectMake(disp.origin.x + (disp.size.width - bw) / 2, disp.origin.y + disp.size.height - bh - 5, bw, bh) level: 20];      /* centred at the bottom: SkyLight window origins are top-left based (checked with the window list) */
+		/* like the real Dock: ONE window the size of the display at level 20 (the bar is drawn inside it); its bar geometry comes from the tiles */
+		CGRect disp = [DockWindow mainDisplayBounds];
+		DockModel *model = [[DockModel alloc] initWithPrefs: prefs displayBounds: disp];
+		DockWindow *win = [[DockWindow alloc] initWithFrame: disp level: 20];
 		[win orderIn];
-		if (getenv("DOCK_LOG")) NSLog(@"dock: window id %u", win.windowID);
+		if (getenv("DOCK_LOG")) NSLog(@"dock: window id %u, %lu tiles, bar %@", win.windowID, (unsigned long)model.tiles.count, NSStringFromRect(NSRectFromCGRect(model.barRect)));
 		if (getenv("DOCK_WINDOW")) {
 			CFArrayRef l = CGWindowListCopyWindowInfo(kCGWindowListOptionAll, kCGNullWindowID);
 			for (NSDictionary *w in (__bridge NSArray *)l) if ([w[(id)kCGWindowOwnerPID] intValue] == getpid()) NSLog(@"dock: my window %@ level %@ bounds %@", w[(id)kCGWindowNumber], w[(id)kCGWindowLayer], w[(id)kCGWindowBounds]);
