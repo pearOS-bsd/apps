@@ -30,11 +30,14 @@ int main(int argc, const char *argv[])
 		CALayer *rootLayer = DockBuildLayers(model, disp.size); [win setRootLayer: rootLayer];
 		DockHover *hover = [[DockHover alloc] initWithRoot: rootLayer model: model]; (void)hover;
 		if (getenv("DOCK_LOG")) NSLog(@"dock: window id %u, %lu tiles, tilesize %d, bar %@", win.windowID, (unsigned long)model.tiles.count, model.tileSize, NSStringFromRect(NSRectFromCGRect(model.barRect)));
+		/* run: DOCK_WINDOW=seconds is the timed mode of the tests on the Mac VM (and lists our window); without it the Dock runs until it is killed, like the real one */
 		if (getenv("DOCK_WINDOW")) {
 			CFArrayRef l = CGWindowListCopyWindowInfo(kCGWindowListOptionAll, kCGNullWindowID);
 			for (NSDictionary *w in (__bridge NSArray *)l) if ([w[(id)kCGWindowOwnerPID] intValue] == getpid()) NSLog(@"dock: my window %@ level %@ bounds %@", w[(id)kCGWindowNumber], w[(id)kCGWindowLayer], w[(id)kCGWindowBounds]);
 			if (l) CFRelease(l);
 			for (double t = 0; t < atof(getenv("DOCK_WINDOW")); t += 0.1) [[NSRunLoop currentRunLoop] runUntilDate: [NSDate dateWithTimeIntervalSinceNow: 0.1]];
+		} else {
+			[[NSRunLoop currentRunLoop] run];
 		}
 		if (getenv("DOCK_LOG")) NSLog(@"dock: %lu preference keys set", (unsigned long)prefs.values.count);
 		(void)argc; (void)argv;
