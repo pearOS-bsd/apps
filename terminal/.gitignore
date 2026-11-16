@@ -1,0 +1,7 @@
+Terminal-mac
+Terminal-gnustep
+test_vt
+*.dSYM
+*.ppm
+*.png
+refs/
