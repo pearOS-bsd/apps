@@ -9,8 +9,13 @@ int main(void)
 	DockItem it[25]; int n = 0;
 	for (int i = 0; i < 19; i++) it[n++].kind = DOCK_APP;
 	it[n++].kind = DOCK_SEPARATOR; it[n++].kind = DOCK_APP; it[n++].kind = DOCK_APP; it[n++].kind = DOCK_SEPARATOR; it[n++].kind = DOCK_OTHER; it[n++].kind = DOCK_TRASH;
-	DockMetrics m = { 64, 99, 0, 1280 }; DockSlot s[25]; DockBar b; double ts = dock_layout_fit(&m, it, n, s, &b);
-	int fails = 0;
+	DockMetrics m = { 64, 99, 0, 1280 }; DockSlot s[25]; DockBar b; double ts = dock_layout_fit(&m, it, n, s, &b, DOCK_SIDE_MARGIN);
+	/* the side Dock of the same 25 items (screenshot + accessibility tree, orientation left): list y 48, 734 long, items 30.2 apart from y 54.2 (Finder), 84.4 (Apps) ... */
+	DockMetrics mv = { 64, 99, 0, 770 }; DockSlot sv[25]; DockBar bv; double tsv = dock_layout_fit(&mv, it, n, sv, &bv, DOCK_EDGE_MARGIN); int vfails = 0;
+	double vy0 = 30, vwant[] = { 54.2, 84.4, 114.6, 144.8 };
+	for (int k = 0; k < 4; k++) if (fabs(vy0 + sv[k].x - vwant[k]) > 0.6) { printf("FAIL side item %d: y %.2f, real %.1f\n", k, vy0 + sv[k].x, vwant[k]); vfails++; }
+	if (fabs(bv.bar_w - 734) > 0.6 || fabs(tsv - 26.2) > 0.3) { printf("FAIL side bar length %.2f (734) tile size %.2f (26.2)\n", bv.bar_w, tsv); vfails++; }
+	int fails = vfails;
 	struct { int idx; double x; const char *what; } want[] = { { 0, 43.9, "Finder" }, { 1, 93.8, "Apps" }, { 18, 941.8, "System Settings" }, { 19, 991.7, "separator" }, { 20, 1014.1, "Terminal" }, { 21, 1064.0, "CLT installer" }, { 22, 1113.9, "separator 2" }, { 23, 1136.3, "Downloads" }, { 24, 1186.2, "Trash" } };
 	for (size_t k = 0; k < sizeof want / sizeof *want; k++) {
 		/* the slot's x is the left edge of the item; the AX frame starts at the same place */

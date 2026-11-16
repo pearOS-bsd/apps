@@ -8,6 +8,7 @@
 @end
 @interface DockMenu : NSObject
 @property (readonly) CGRect frame;
+@property BOOL rightTop;                   /* the anchor is the panel's top-right corner (beside a Dock on the right edge) */
 @property BOOL leftTop;                    /* the anchor is the panel's top-left corner (a submenu) instead of the bottom centre */
 - (instancetype)initWithItems:(NSArray<DockMenuItem *> *)items;
 - (void)showInLayer:(CALayer *)root at:(CGPoint)anchorBottomCentre displayHeight:(CGFloat)h;      /* the panel's bottom edge is at the anchor, centred on x, above the tile */

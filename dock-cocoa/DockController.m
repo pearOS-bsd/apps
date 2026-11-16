@@ -9,7 +9,7 @@
 #import "../dock/dock_layout.h"
 @implementation DockController
 { DockWindow *win, *wall; DockHover *hover; DockInput *input; NSTimer *refresh; NSString *signature; }
-- (NSString *)runtimeSignature { NSMutableString *s = [NSMutableString string]; for (DockTile *t in _model.tiles) [s appendFormat: @"%@|%d|%@;", t.path, t.running, t.badge]; return s; }
+- (NSString *)runtimeSignature { NSMutableString *s = [NSMutableString string]; [s appendFormat: @"%@|%@|", _prefs.values[@"orientation"], _prefs.values[@"tilesize"]]; for (DockTile *t in _model.tiles) [s appendFormat: @"%@|%d|%@;", t.path, t.running, t.badge]; return s; }
 - (id)hoverObject { return hover; }
 - (void)start
 {
@@ -34,7 +34,7 @@
 	refresh = [NSTimer scheduledTimerWithTimeInterval: 1.5 repeats: YES block: ^(NSTimer *t) {
 		if ([input busy]) return;
 		DockPrefs *p = [[DockPrefs alloc] initFromPreferences]; DockModel *m = [[DockModel alloc] initWithPrefs: p displayBounds: self->_display];
-		NSMutableString *s = [NSMutableString string]; for (DockTile *x in m.tiles) [s appendFormat: @"%@|%d|%@;", x.path, x.running, x.badge];
+		NSMutableString *s = [NSMutableString string]; [s appendFormat: @"%@|%@|", p.values[@"orientation"], p.values[@"tilesize"]]; for (DockTile *x in m.tiles) [s appendFormat: @"%@|%d|%@;", x.path, x.running, x.badge];
 		if (![s isEqualToString: self->signature]) { [self reload]; self->signature = [self runtimeSignature]; }
 	}];
 	if (getenv("DOCK_LOG")) NSLog(@"dock: window id %u, %lu tiles, tilesize %d, bar %@", win.windowID, (unsigned long)_model.tiles.count, _model.tileSize, NSStringFromRect(NSRectFromCGRect(_model.barRect)));

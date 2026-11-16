@@ -24,7 +24,7 @@ static const CGFloat kRow = 22, kPad = 6, kSep = 9;
 {
 	CGFloat w = 120, h = 2 * kPad;
 	for (DockMenuItem *i in items) { h += i.isSeparator ? kSep : kRow; if (!i.isSeparator) w = MAX(w, [self widthOf: i.title bold: i.isTitle] + 44); }
-	CGFloat x = _leftTop ? anchor.x : round(anchor.x - w / 2), y = _leftTop ? anchor.y : anchor.y - h - 4; if (y < 34) y = 34;
+	CGFloat x = _leftTop ? anchor.x : _rightTop ? anchor.x - w : round(anchor.x - w / 2), y = (_leftTop || _rightTop) ? anchor.y : anchor.y - h - 4; if (y < 34) y = 34;
 	rect = CGRectMake(MAX(4, x), y, w, h);
 	panel = [CALayer layer]; panel.frame = rect; panel.cornerRadius = 10; panel.masksToBounds = NO;
 	CGColorRef bg = CGColorCreateGenericRGB(0.14, 0.14, 0.15, 0.96); panel.backgroundColor = bg; CGColorRelease(bg);

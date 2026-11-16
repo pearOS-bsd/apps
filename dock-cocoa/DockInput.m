@@ -32,7 +32,7 @@ static CGEventRef onEvent(CGEventTapProxy proxy, CGEventType type, CGEventRef ev
 - (DockTile *)tileAt:(CGPoint)p
 {
 	DockModel *m = ctl.model; if (!CGRectContainsPoint(CGRectInset(m.barRect, 0, -2), p)) return nil;
-	for (DockTile *t in m.tiles) if (p.x >= CGRectGetMinX(t.frame) && p.x < CGRectGetMaxX(t.frame)) return t;
+	for (DockTile *t in m.tiles) if (DockAxis(m, p) >= DockTileMin(m, t) && DockAxis(m, p) < DockTileMax(m, t)) return t;
 	return nil;
 }
 - (BOOL)inBar:(CGPoint)p { return CGRectContainsPoint(CGRectInset(ctl.model.barRect, 0, -2), p); }
@@ -68,7 +68,9 @@ static CGEventRef onEvent(CGEventTapProxy proxy, CGEventType type, CGEventRef ev
 		} else [items addObject: [DockMenuItem item: @"Open" action: ^{ DockOpenTile(t); }]];
 	}
 	menu = [[DockMenu alloc] initWithItems: items]; menuTile = t;
-	[menu showInLayer: ctl.root at: CGPointMake(CGRectGetMidX(t.frame), CGRectGetMinY(ctl.model.barRect) - 6) displayHeight: ctl.display.size.height];
+	DockModel *mm = ctl.model;
+	if (mm.orientation == 0) [menu showInLayer: ctl.root at: CGPointMake(CGRectGetMidX(t.frame), CGRectGetMinY(mm.barRect) - 6) displayHeight: ctl.display.size.height];
+	else { menu.leftTop = mm.orientation == 1; menu.rightTop = mm.orientation == 2; [menu showInLayer: ctl.root at: CGPointMake(mm.orientation == 1 ? CGRectGetMaxX(mm.barRect) + 6 : CGRectGetMinX(mm.barRect) - 6, CGRectGetMidY(t.frame) - 14) displayHeight: ctl.display.size.height]; }
 }
 
 /* returns YES when the event is swallowed */
@@ -90,7 +92,7 @@ static CGEventRef onEvent(CGEventTapProxy proxy, CGEventType type, CGEventRef ev
 	case kCGEventLeftMouseDown: {
 		DockTile *t = [self tileAt: p]; if (!t) return NO;
 		down = p; pressed = t;
-		if (t.kind == DOCK_SEPARATOR) { st = StResizing; int pref = [ctl.prefs.values[@"tilesize"] intValue]; baseSize = pref > 0 ? pref : m.tileSize; resizeY0 = p.y; } else st = StPressed;       /* the preference, not the (shrunk) displayed size */
+		if (t.kind == DOCK_SEPARATOR) { st = StResizing; resizeY0 = m.orientation == 0 ? p.y : p.x; int pref = [ctl.prefs.values[@"tilesize"] intValue]; baseSize = pref > 0 ? pref : m.tileSize; } else st = StPressed;       /* the preference, not the (shrunk) displayed size */
 		return YES; }
 	case kCGEventLeftMouseDragged: {
 		if (st == StPressed && hypot(p.x - down.x, p.y - down.y) > 5 && [self draggable: pressed] && pressed.iconLayer) {
@@ -102,7 +104,7 @@ static CGEventRef onEvent(CGEventTapProxy proxy, CGEventType type, CGEventRef ev
 			pressed.iconLayer.position = CGPointMake(iconHome.x + (p.x - down.x), iconHome.y + (p.y - down.y)); [CATransaction commit]; [CATransaction flush]; return YES;
 		}
 		if (st == StResizing) {
-			int ts = baseSize + (int)round(resizeY0 - p.y); if (ts < 16) ts = 16; if (ts > 128) ts = 128;       /* approximate: the real Dock's rule for the divider drag is not measured */
+			int ts = baseSize + (int)round(ctl.model.orientation == 0 ? resizeY0 - p.y : ctl.model.orientation == 1 ? p.x - resizeY0 : resizeY0 - p.x); if (ts < 16) ts = 16; if (ts > 128) ts = 128;       /* approximate: the real Dock's rule for the divider drag is not measured */
 			[ctl setPreference: @(ts) forKey: @"tilesize"]; return YES;
 		}
 		return st != StIdle; }
@@ -118,19 +120,19 @@ static CGEventRef onEvent(CGEventTapProxy proxy, CGEventType type, CGEventRef ev
 - (void)dropTile:(DockTile *)t at:(CGPoint)p
 {
 	DockModel *m = ctl.model;
-	BOOL outside = p.y < CGRectGetMinY(m.barRect) - 60;                 /* dragged away from the Dock: the tile is taken out (the real Dock shows a puff of smoke: not done) */
+	BOOL outside = m.orientation == 0 ? p.y < CGRectGetMinY(m.barRect) - 60 : m.orientation == 1 ? p.x > CGRectGetMaxX(m.barRect) + 60 : p.x < CGRectGetMinX(m.barRect) - 60;                 /* dragged away from the Dock: the tile is taken out (the real Dock shows a puff of smoke: not done) */
 	if (t.section == 0) {
 		NSMutableArray *apps = [[ctl persistentApps] mutableCopy]; NSUInteger from = [apps indexOfObjectIdenticalTo: t.dict]; if (from == NSNotFound) { [ctl reload]; return; }
 		[apps removeObjectAtIndex: from];
 		if (!outside) {                                                   /* the new place: before the first persistent tile whose centre is to the right of the pointer */
 			NSUInteger to = apps.count; NSUInteger k = 0;
-			for (DockTile *o in m.tiles) { if (o.section != 0 || o.kind != DOCK_APP || !o.dict || o == t) continue; if (p.x < CGRectGetMidX(o.frame)) { to = k; break; } k++; }
+			for (DockTile *o in m.tiles) { if (o.section != 0 || o.kind != DOCK_APP || !o.dict || o == t) continue; if (DockAxis(m, p) < DockTileMid(m, o)) { to = k; break; } k++; }
 			[apps insertObject: t.dict atIndex: MIN(to, apps.count)];
 		}
 		[ctl setPersistentApps: apps];
 	} else if (t.section == 2 && t.dict) {
 		NSMutableArray *others = [NSMutableArray array]; for (DockTile *o in m.tiles) if (o.section == 2 && o.kind == DOCK_OTHER && o.dict && o != t) [others addObject: o.dict];
-		if (!outside) { NSUInteger to = others.count, k = 0; for (DockTile *o in m.tiles) { if (o.section != 2 || o.kind != DOCK_OTHER || !o.dict || o == t) continue; if (p.x < CGRectGetMidX(o.frame)) { to = k; break; } k++; } [others insertObject: t.dict atIndex: MIN(to, others.count)]; }
+		if (!outside) { NSUInteger to = others.count, k = 0; for (DockTile *o in m.tiles) { if (o.section != 2 || o.kind != DOCK_OTHER || !o.dict || o == t) continue; if (DockAxis(m, p) < DockTileMid(m, o)) { to = k; break; } k++; } [others insertObject: t.dict atIndex: MIN(to, others.count)]; }
 		[ctl setPreference: others forKey: @"persistent-others"];
 	} else [ctl reload];
 }

@@ -2,6 +2,7 @@
 #import "../dock/dock_layout.h"
 #import "dock_fit.h"
 #import "DockRunning.h"
+#import "SkyLightAPI.h"
 @implementation DockTile @end
 static DockTile *TileFromDict(NSDictionary *d, int kind)
 {
@@ -52,13 +53,21 @@ static DockTile *TileFromDict(NSDictionary *d, int kind)
 	m.magnification = [prefs.values[@"magnification"] boolValue];
 	NSUInteger n = list.count; DockItem *items = calloc(n, sizeof *items); DockSlot *slots = calloc(n, sizeof *slots); DockBar bar;
 	for (NSUInteger i = 0; i < n; i++) items[i].kind = list[i].kind;
-	/* too many tiles: the tile size shrinks continuously until the bar is exactly display - 2 * 36 wide (dock_fit.c, ground truth: the real Dock's accessibility tree) */
-	double fitted = dock_layout_fit(&m, items, (int)n, slots, &bar);
-	m.tilesize = (int)(fitted + 0.5);
-	_tileSize = m.tilesize;
-	CGFloat barTop = display.origin.y + display.size.height - bar.bar_h - bar.bottom_margin;
-	for (NSUInteger i = 0; i < n; i++) { list[i].frame = CGRectMake(display.origin.x + slots[i].x, barTop, slots[i].w, bar.bar_h); list[i].art = slots[i].art; }
-	_barRect = CGRectMake(display.origin.x + bar.bar_x, display.origin.y + display.size.height - bar.bar_h - bar.bottom_margin, bar.bar_w, bar.bar_h);
+	NSString *ori = prefs.values[@"orientation"]; _orientation = [ori isEqualToString: @"left"] ? 1 : [ori isEqualToString: @"right"] ? 2 : 0;
+	CGFloat menubar = 30; { const SkyLightAPI *sl = SkyLightLoad(); uint32_t h = 0; if (sl && sl->MainDisplayID && sl->GetDisplayMenubarHeight && sl->GetDisplayMenubarHeight(sl->MainDisplayID(), &h) == 0 && h) menubar = h; }
+	/* the tiles run along the width (bottom) or along the height under the menu bar (sides); margins 36 / 18 measured on the real Dock (dock_fit.h) */
+	if (_orientation == 0) m.screen_w = (int)display.size.width; else m.screen_w = (int)(display.size.height - menubar);
+	double fitted = dock_layout_fit(&m, items, (int)n, slots, &bar, _orientation == 0 ? DOCK_SIDE_MARGIN : DOCK_EDGE_MARGIN);
+	m.tilesize = (int)(fitted + 0.5); _tileSize = m.tilesize;
+	if (_orientation == 0) {
+		CGFloat barTop = display.origin.y + display.size.height - bar.bar_h - bar.bottom_margin;
+		_barRect = CGRectMake(display.origin.x + bar.bar_x, barTop, bar.bar_w, bar.bar_h);
+		for (NSUInteger i = 0; i < n; i++) { list[i].frame = CGRectMake(display.origin.x + slots[i].x, barTop, slots[i].w, bar.bar_h); list[i].art = slots[i].art; }
+	} else {
+		CGFloat thick = m.tilesize + 16, x = _orientation == 1 ? display.origin.x + 5 : display.origin.x + display.size.width - 5 - thick;   /* 5 px from the screen edge, thickness tile size + 16 (measured: 42 at 26) */
+		_barRect = CGRectMake(x, display.origin.y + menubar + bar.bar_x, thick, bar.bar_w);
+		for (NSUInteger i = 0; i < n; i++) { list[i].frame = CGRectMake(x, display.origin.y + menubar + slots[i].x, thick, slots[i].w); list[i].art = slots[i].art; }
+	}
 	free(items); free(slots);
 	return self;
 }

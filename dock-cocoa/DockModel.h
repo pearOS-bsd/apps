@@ -17,8 +17,15 @@
 @end
 @interface DockModel : NSObject
 @property (readonly) NSArray<DockTile *> *tiles;
+@property (readonly) int orientation;                /* 0 bottom, 1 left, 2 right (preference `orientation`) */
 @property (readonly) int tileSize;                    /* after shrinking to fit the display */
 @property (readonly) CGRect barRect;                 /* in window coordinates, origin top-left, window = the display */
 + (NSDictionary *)tileDictionaryForPath:(NSString *)path label:(NSString *)label bundleIdentifier:(NSString *)bid;     /* a new file-tile in the shape of the real Dock's (docs/development/DOCK-CONFIG.md) */
 - (instancetype)initWithPrefs:(DockPrefs *)prefs displayBounds:(CGRect)display;
 @end
+
+/* the coordinate along the tiles: x for the bottom Dock, y for a side Dock */
+static inline CGFloat DockAxis(DockModel *m, CGPoint p) { return m.orientation == 0 ? p.x : p.y; }
+static inline CGFloat DockTileMin(DockModel *m, DockTile *t) { return m.orientation == 0 ? CGRectGetMinX(t.frame) : CGRectGetMinY(t.frame); }
+static inline CGFloat DockTileMax(DockModel *m, DockTile *t) { return m.orientation == 0 ? CGRectGetMaxX(t.frame) : CGRectGetMaxY(t.frame); }
+static inline CGFloat DockTileMid(DockModel *m, DockTile *t) { return (DockTileMin(m, t) + DockTileMax(m, t)) / 2; }
