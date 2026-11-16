@@ -8,6 +8,7 @@
 @property (copy) NSString *label, *path, *bundleIdentifier, *tileType;
 @property CGRect frame;                              /* the tile's slot in window coordinates (top-left origin), set by the layout */
 @property CGFloat art;                               /* edge of the icon art */
+@property (copy) NSString *badge;                    /* the badge text (a count), from the application's StatusLabel; nil for none */
 @property BOOL running;                              /* a running application (the dot under the icon) */
 @property (copy) NSDictionary *dict;                /* the tile as it is in the preferences (nil for Finder, running apps not kept, separators, Trash) */
 @property int section;                               /* 0 applications | 1 running / recent | 2 folders and Trash */

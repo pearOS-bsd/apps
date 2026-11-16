@@ -1,6 +1,7 @@
 #import "DockView.h"
 #import "../dock/dock_layout.h"
 #import "DockIcons.h"
+#import <CoreText/CoreText.h>
 CALayer *DockBuildLayers(DockModel *model, CGSize display)
 {
 	/* the backing scale of the display: the icons are asked for at that scale (2x images squeezed into 1x pixels look jagged) */
@@ -36,6 +37,13 @@ CALayer *DockBuildLayers(DockModel *model, CGSize display)
 		else if (t.kind == DOCK_OTHER) DockLoadTypeIcon(@"public.folder", a, scale, done);
 		else DockLoadBundleIcon(t.path, a, scale, done);
 		t.iconLayer = l; [root addSublayer: l];
+		if (t.badge.length) {          /* the badge: measured on the real Dock (System Settings, 17 px red circle: x = icon right - 19, y = icon top, colour 244 63 53) */
+			CGFloat d = 17; CALayer *b = [CALayer layer]; b.frame = CGRectMake(px + a - d - 2, py, d, d); b.cornerRadius = d / 2;
+			CGColorRef red = CGColorCreateGenericRGB(244 / 255.0, 63 / 255.0, 53 / 255.0, 1); b.backgroundColor = red; CGColorRelease(red);
+			CATextLayer *tx = [CATextLayer layer]; tx.string = t.badge; tx.fontSize = 12; tx.alignmentMode = kCAAlignmentCenter; tx.contentsScale = 1;
+			CTFontRef bf = CTFontCreateUIFontForLanguage(kCTFontUIFontEmphasizedSystem, 12, NULL); tx.font = bf; CFRelease(bf);
+			CGColorRef wh = CGColorCreateGenericRGB(1, 1, 1, 1); tx.foregroundColor = wh; CGColorRelease(wh); tx.frame = CGRectMake(0, 1.5, d, d - 2); [b addSublayer: tx]; [root addSublayer: b];
+		}
 		if (t.running) {           /* the dot under a running application */
 			CALayer *dot = [CALayer layer]; dot.frame = CGRectMake(CGRectGetMidX(t.frame) - 2, CGRectGetMinY(t.frame) + t.frame.size.height - 6.5, 4, 4); dot.cornerRadius = 2;
 			CGColorRef w = CGColorCreateGenericRGB(1, 1, 1, 0.85); dot.backgroundColor = w; CGColorRelease(w); [root addSublayer: dot];

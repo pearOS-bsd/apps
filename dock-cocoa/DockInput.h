@@ -5,4 +5,5 @@
 @class DockController;
 @interface DockInput : NSObject
 - (instancetype)initWithController:(DockController *)controller;
+- (BOOL)busy;                                          /* a menu is open or a drag is in progress: do not rebuild the layers now */
 @end

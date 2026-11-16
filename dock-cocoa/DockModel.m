@@ -43,8 +43,8 @@ static DockTile *TileFromDict(NSDictionary *d, int kind)
 	for (NSDictionary *d in prefs.values[@"persistent-others"]) [list addObject: TileFromDict(d, DOCK_OTHER)];
 	DockTile *trash = [DockTile new]; trash.kind = DOCK_TRASH; trash.label = @"Trash"; [list addObject: trash];
 	{ int sec = 0; for (DockTile *t in list) { if (t.kind == DOCK_SEPARATOR) { sec++; t.section = sec; continue; } t.section = (t.kind == DOCK_OTHER || t.kind == DOCK_TRASH) ? 2 : sec; } }
-	{ NSMutableSet *runPaths = [NSMutableSet set]; for (NSDictionary *a in DockRunningApplications()) [runPaths addObject: [a[@"path"] stringByStandardizingPath]];
-	  for (DockTile *t in list) if (t.path && [runPaths containsObject: t.path.stringByStandardizingPath]) t.running = YES; }
+	{ NSMutableDictionary *runPaths = [NSMutableDictionary dictionary]; for (NSDictionary *a in DockRunningApplications()) runPaths[[a[@"path"] stringByStandardizingPath]] = a;
+	  for (DockTile *t in list) { NSDictionary *a = t.path ? runPaths[t.path.stringByStandardizingPath] : nil; if (a) { t.running = YES; if ([a[@"badge"] length]) t.badge = a[@"badge"]; } } }
 	/* sizes: the preferences when set; our defaults are measurements on a 1280x800 display, NOT the real Dock's registered defaults (still unknown) */
 	DockMetrics m = { 58, 99, 0, (int)display.size.width };
 	if ([prefs.values[@"tilesize"] intValue] > 0) m.tilesize = [prefs.values[@"tilesize"] intValue];

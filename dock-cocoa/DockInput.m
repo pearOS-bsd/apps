@@ -36,6 +36,7 @@ static CGEventRef onEvent(CGEventTapProxy proxy, CGEventType type, CGEventRef ev
 	return nil;
 }
 - (BOOL)inBar:(CGPoint)p { return CGRectContainsPoint(CGRectInset(ctl.model.barRect, 0, -2), p); }
+- (BOOL)busy { return menu != nil || st != StIdle; }
 - (void)closeMenu { [menu close]; menu = nil; menuTile = nil; }
 - (BOOL)draggable:(DockTile *)t { return t.dict != nil && (t.section == 0 || t.section == 2) && t.kind != DOCK_TRASH && t.kind != DOCK_SEPARATOR; }
 
