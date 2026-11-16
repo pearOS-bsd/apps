@@ -5,9 +5,7 @@
 #import "DockServices.h"
 #import "DockWindow.h"
 #import "DockModel.h"
-#import "DockView.h"
-#import "DockWallpaper.h"
-#import "DockHover.h"
+#import "DockController.h"
 #import <CoreGraphics/CoreGraphics.h>
 int main(int argc, const char *argv[])
 {
@@ -20,16 +18,7 @@ int main(int argc, const char *argv[])
 		[prefs readSystemKeys];
 		[DockServices checkInServer];
 		/* the window (DOCK_WINDOW=seconds keeps the process alive that long, for the checks on the Mac VM) */
-		/* like the real Dock: ONE window the size of the display at level 20 (the bar is drawn inside it); its bar geometry comes from the tiles */
-		CGRect disp = [DockWindow mainDisplayBounds];
-		DockModel *model = [[DockModel alloc] initWithPrefs: prefs displayBounds: disp];
-		DockWindow *win = [[DockWindow alloc] initWithFrame: disp level: 20];
-		DockWindow *wall = [[DockWindow alloc] initWithFrame: disp level: -2147483624 options: 1];            /* the wallpaper window, created second like the real Dock */
-		[win orderIn]; [wall orderIn];
-		[wall setRootLayer: DockWallpaperLayer(disp.size)];
-		CALayer *rootLayer = DockBuildLayers(model, disp.size); [win setRootLayer: rootLayer];
-		DockHover *hover = [[DockHover alloc] initWithRoot: rootLayer model: model]; (void)hover;
-		if (getenv("DOCK_LOG")) NSLog(@"dock: window id %u, %lu tiles, tilesize %d, bar %@", win.windowID, (unsigned long)model.tiles.count, model.tileSize, NSStringFromRect(NSRectFromCGRect(model.barRect)));
+		DockController *dock = [DockController new]; [dock start]; (void)prefs;
 		/* run: DOCK_WINDOW=seconds is the timed mode of the tests on the Mac VM (and lists our window); without it the Dock runs until it is killed, like the real one */
 		if (getenv("DOCK_WINDOW")) {
 			CFArrayRef l = CGWindowListCopyWindowInfo(kCGWindowListOptionAll, kCGNullWindowID);

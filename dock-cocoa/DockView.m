@@ -35,7 +35,7 @@ CALayer *DockBuildLayers(DockModel *model, CGSize display)
 		else if (t.kind == DOCK_OTHER && [t.path.lastPathComponent isEqualToString: @"Downloads"]) DockLoadIcnsIcon([ct stringByAppendingString: @"DownloadsFolder.icns"], a, scale, done);
 		else if (t.kind == DOCK_OTHER) DockLoadTypeIcon(@"public.folder", a, scale, done);
 		else DockLoadBundleIcon(t.path, a, scale, done);
-		[root addSublayer: l];
+		t.iconLayer = l; [root addSublayer: l];
 		if (t.running) {           /* the dot under a running application */
 			CALayer *dot = [CALayer layer]; dot.frame = CGRectMake(CGRectGetMidX(t.frame) - 2, CGRectGetMinY(t.frame) + t.frame.size.height - 6.5, 4, 4); dot.cornerRadius = 2;
 			CGColorRef w = CGColorCreateGenericRGB(1, 1, 1, 0.85); dot.backgroundColor = w; CGColorRelease(w); [root addSublayer: dot];

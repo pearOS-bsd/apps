@@ -8,11 +8,18 @@ static DockTile *TileFromDict(NSDictionary *d, int kind)
 	NSDictionary *td = d[@"tile-data"]; NSString *u = td[@"file-data"][@"_CFURLString"];
 	DockTile *t = [DockTile new]; t.kind = kind; t.tileType = d[@"tile-type"];
 	NSURL *url = u ? [NSURL URLWithString: u] : nil; NSString *p = [url isFileURL] ? [url path] : u;
-	t.path = p; t.label = td[@"file-label"] ?: [[p lastPathComponent] stringByDeletingPathExtension]; t.bundleIdentifier = td[@"bundle-identifier"];
+	t.dict = d; t.path = p; t.label = td[@"file-label"] ?: [[p lastPathComponent] stringByDeletingPathExtension]; t.bundleIdentifier = td[@"bundle-identifier"];
 	return t;
 }
 @implementation DockModel
 { NSMutableArray<DockTile *> *list; }
++ (NSDictionary *)tileDictionaryForPath:(NSString *)path label:(NSString *)label bundleIdentifier:(NSString *)bid
+{
+	NSString *u = [@"file://" stringByAppendingString: [[path stringByAddingPercentEncodingWithAllowedCharacters: [NSCharacterSet URLPathAllowedCharacterSet]] stringByAppendingString: @"/"]];
+	NSMutableDictionary *td = [@{ @"file-data": @{ @"_CFURLString": u, @"_CFURLStringType": @15 }, @"file-label": label ?: path.lastPathComponent.stringByDeletingPathExtension, @"file-type": @41, @"dock-extra": @NO, @"is-beta": @NO } mutableCopy];
+	if (bid.length) td[@"bundle-identifier"] = bid;
+	return @{ @"GUID": @(arc4random()), @"tile-type": @"file-tile", @"tile-data": td };
+}
 - (NSArray<DockTile *> *)tiles { return list; }
 - (instancetype)initWithPrefs:(DockPrefs *)prefs displayBounds:(CGRect)display
 {
@@ -35,6 +42,7 @@ static DockTile *TileFromDict(NSDictionary *d, int kind)
 	if (middle.count) { [list addObjectsFromArray: middle]; DockTile *sep2 = [DockTile new]; sep2.kind = DOCK_SEPARATOR; [list addObject: sep2]; }
 	for (NSDictionary *d in prefs.values[@"persistent-others"]) [list addObject: TileFromDict(d, DOCK_OTHER)];
 	DockTile *trash = [DockTile new]; trash.kind = DOCK_TRASH; trash.label = @"Trash"; [list addObject: trash];
+	{ int sec = 0; for (DockTile *t in list) { if (t.kind == DOCK_SEPARATOR) { sec++; t.section = sec; continue; } t.section = (t.kind == DOCK_OTHER || t.kind == DOCK_TRASH) ? 2 : sec; } }
 	{ NSMutableSet *runPaths = [NSMutableSet set]; for (NSDictionary *a in DockRunningApplications()) [runPaths addObject: [a[@"path"] stringByStandardizingPath]];
 	  for (DockTile *t in list) if (t.path && [runPaths containsObject: t.path.stringByStandardizingPath]) t.running = YES; }
 	/* sizes: the preferences when set; our defaults are measurements on a 1280x800 display, NOT the real Dock's registered defaults (still unknown) */

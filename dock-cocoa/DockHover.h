@@ -3,6 +3,9 @@
  * SCAFFOLDING: the pointer position is polled from CoreGraphics at 60 Hz; the real Dock receives events from SkyLight (SLSSetBackgroundEventMaskAndShape / the event port): to be replaced and traced. */
 #import <QuartzCore/QuartzCore.h>
 #import "DockModel.h"
+@class DockController;
 @interface DockHover : NSObject
-- (instancetype)initWithRoot:(CALayer *)root model:(DockModel *)model;
+- (instancetype)initWithController:(DockController *)controller;
+- (void)modelChanged;                                  /* the controller rebuilt the layers: forget the label */
+- (void)hideLabel;
 @end

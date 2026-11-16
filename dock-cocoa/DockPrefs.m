@@ -23,6 +23,11 @@
 	return self;
 }
 /* TODO(feature): the real Dock reads these as a side effect of using ImageIO and the Siri / Assistant support (Dock's Siri tile, search); the domains are our reading of the trace, which logs only the key */
++ (void)setValue:(id)value forKey:(NSString *)key
+{
+	CFPreferencesSetAppValue((__bridge CFStringRef)key, (__bridge CFPropertyListRef)value, CFSTR("com.apple.dock"));
+	CFPreferencesAppSynchronize(CFSTR("com.apple.dock"));
+}
 - (void)readSystemKeys
 {
 	CFPropertyListRef v;

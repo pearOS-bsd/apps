@@ -7,4 +7,5 @@
 - (instancetype)initFromPreferences;                            /* reads every key of +keys in the order of the real Dock */
 - (void)readSystemKeys;                                          /* the keys of other domains the real Dock reads at startup (ImageIO, Siri) */
 + (NSArray<NSString *> *)keys;
++ (void)setValue:(id)value forKey:(NSString *)key;                 /* CFPreferencesSetAppValue + AppSynchronize in com.apple.dock (through cfprefsd, like the real Dock) */
 @end
