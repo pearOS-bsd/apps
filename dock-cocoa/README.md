@@ -41,6 +41,7 @@ Finding: with the real Dock stopped (`launchctl bootout gui/501/com.apple.Dock.a
 | first bar and placeholders | 6.25 | 62 |
 | bar colour (black, alpha 0.906 over the white desktop) | 4.43 | 44 |
 | 25 items (running apps from LaunchServices) + exact fit (bar 36 -> 1244) + dots | 2.02 | 19.9 |
-| icon layer = tile size (38 px visible, like the real one) | **0.54** | **5.04** |
+| icon layer = tile size (38 px visible, like the real one) | 0.54 | 5.04 |
+| icons asked at the display's backing scale (1x here), trilinear minification, layers on whole pixels (2x images squeezed into 1x and fractional origins made ours look jagged / soft) | **0.29** | **2.55** |
 Above the bar the difference is 0.04: the wallpaper window matches. What still differs: the Calendar icon (the real Dock draws today's date through the app's `docktileplugin`), the badge on System Settings (a notification count), the bar's blurred-material look and its 1 px border.
 Ground truth for positions: the real Dock's accessibility tree (a TCC row for Accessibility was added on the Mac VM like the one for screen capture; backup `/Users/alex/TCC.db.backup-before-accessibility`): list x 36, 1208 wide, items 49.9 apart, separators 22.4; `make check` verifies all of them within 0.6 px. The 25th item is the running application "Install Command Line Developer Tools": the section after the first separator is the running applications that are not in the Dock permanently (LaunchServices: `_LSCopyRunningApplicationArray(0xFFFFFFFE)`), then the recents that are not running.
