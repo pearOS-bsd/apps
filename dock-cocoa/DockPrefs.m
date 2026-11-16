@@ -22,4 +22,13 @@
 	_values = m;
 	return self;
 }
+/* TODO(feature): the real Dock reads these as a side effect of using ImageIO and the Siri / Assistant support (Dock's Siri tile, search); the domains are our reading of the trace, which logs only the key */
+- (void)readSystemKeys
+{
+	CFPropertyListRef v;
+	v = CFPreferencesCopyAppValue(CFSTR("IIOEnableOOP"), kCFPreferencesCurrentApplication); if (v) CFRelease(v);
+	for (NSString *k in @[ @"Session Language", @"Additional Languages", @"Assistant Enabled" ]) {
+		v = CFPreferencesCopyAppValue((__bridge CFStringRef)k, CFSTR("com.apple.assistant.support")); if (v) CFRelease(v);
+	}
+}
 @end

@@ -1,0 +1,6 @@
+/* Strings of the Dock (our own English text; the keys are ours) */
+"dock.options" = "Options";
+"dock.keep" = "Keep in Dock";
+"dock.open-at-login" = "Open at Login";
+"dock.show-in-finder" = "Show in Finder";
+"dock.quit" = "Quit";

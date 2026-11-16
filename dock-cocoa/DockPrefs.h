@@ -5,5 +5,6 @@
 @interface DockPrefs : NSObject
 @property (readonly) NSDictionary<NSString *, id> *values;      /* key -> value (only keys that are set) */
 - (instancetype)initFromPreferences;                            /* reads every key of +keys in the order of the real Dock */
+- (void)readSystemKeys;                                          /* the keys of other domains the real Dock reads at startup (ImageIO, Siri) */
 + (NSArray<NSString *> *)keys;
 @end
