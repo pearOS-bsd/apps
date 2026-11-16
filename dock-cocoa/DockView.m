@@ -5,14 +5,14 @@ CALayer *DockBuildLayers(DockModel *model, CGSize display)
 {
 	CALayer *root = [CALayer layer]; root.frame = CGRectMake(0, 0, display.width, display.height); root.geometryFlipped = YES;       /* top-left origin like SkyLight */
 	CALayer *bar = [CALayer layer]; bar.frame = model.barRect; bar.cornerRadius = 20;
-	CGColorRef dark = CGColorCreateGenericRGB(0.13, 0.13, 0.13, 0.78); bar.backgroundColor = dark; CGColorRelease(dark);
+	CGColorRef dark = CGColorCreateGenericRGB(0, 0, 0, 0.906);      /* matches the real bar over a white desktop (pixel 24); the real one is a blurred material, so on other backgrounds it differs */ bar.backgroundColor = dark; CGColorRelease(dark);
 	[root addSublayer: bar];
 	for (DockTile *t in model.tiles) {
 		if (t.kind == DOCK_SEPARATOR) {
 			CALayer *l = [CALayer layer]; l.frame = CGRectMake(CGRectGetMidX(t.frame) - 0.5, CGRectGetMinY(t.frame) + 10, 1, t.frame.size.height - 20);
 			CGColorRef c = CGColorCreateGenericRGB(1, 1, 1, 0.25); l.backgroundColor = c; CGColorRelease(c); [root addSublayer: l]; continue;
 		}
-		CALayer *l = [CALayer layer]; CGFloat a = t.art > 0 ? t.art : model.tileSize * 0.81;
+		CALayer *l = [CALayer layer]; CGFloat a = model.tileSize;      /* the icon image is tilesize wide; its artwork is ~0.81 of it (measured: 38 px visible at tile size 46) */
 		l.frame = CGRectMake(CGRectGetMidX(t.frame) - a / 2, CGRectGetMinY(t.frame) + 10 + (model.tileSize - a) / 2, a, a); l.cornerRadius = a * 0.22;
 		CGColorRef c = t.kind == DOCK_TRASH ? CGColorCreateGenericRGB(0.7, 0.7, 0.7, 1) : t.kind == DOCK_OTHER ? CGColorCreateGenericRGB(0.3, 0.6, 0.9, 1) : CGColorCreateGenericRGB(0.9, 0.9, 0.95, 1);
 		l.backgroundColor = c; CGColorRelease(c);
@@ -32,6 +32,10 @@ CALayer *DockBuildLayers(DockModel *model, CGSize display)
 		else if (t.kind == DOCK_OTHER) DockLoadTypeIcon(@"public.folder", a, 2, done);
 		else DockLoadBundleIcon(t.path, a, 2, done);
 		[root addSublayer: l];
+		if (t.running) {           /* the dot under a running application */
+			CALayer *dot = [CALayer layer]; dot.frame = CGRectMake(CGRectGetMidX(t.frame) - 2, CGRectGetMinY(t.frame) + t.frame.size.height - 6.5, 4, 4); dot.cornerRadius = 2;
+			CGColorRef w = CGColorCreateGenericRGB(1, 1, 1, 0.85); dot.backgroundColor = w; CGColorRelease(w); [root addSublayer: dot];
+		}
 	}
 	return root;
 }

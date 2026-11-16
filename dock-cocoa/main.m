@@ -6,6 +6,7 @@
 #import "DockWindow.h"
 #import "DockModel.h"
 #import "DockView.h"
+#import "DockWallpaper.h"
 #import <CoreGraphics/CoreGraphics.h>
 int main(int argc, const char *argv[])
 {
@@ -22,7 +23,9 @@ int main(int argc, const char *argv[])
 		CGRect disp = [DockWindow mainDisplayBounds];
 		DockModel *model = [[DockModel alloc] initWithPrefs: prefs displayBounds: disp];
 		DockWindow *win = [[DockWindow alloc] initWithFrame: disp level: 20];
-		[win orderIn];
+		DockWindow *wall = [[DockWindow alloc] initWithFrame: disp level: -2147483624 options: 1];            /* the wallpaper window, created second like the real Dock */
+		[win orderIn]; [wall orderIn];
+		[wall setRootLayer: DockWallpaperLayer(disp.size)];
 		[win setRootLayer: DockBuildLayers(model, disp.size)];
 		if (getenv("DOCK_LOG")) NSLog(@"dock: window id %u, %lu tiles, tilesize %d, bar %@", win.windowID, (unsigned long)model.tiles.count, model.tileSize, NSStringFromRect(NSRectFromCGRect(model.barRect)));
 		if (getenv("DOCK_WINDOW")) {

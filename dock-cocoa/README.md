@@ -34,3 +34,13 @@ Recipe that works on macOS 26.7.2 (found by tracing the real Dock with dtrace, t
 ## Icons (2026-11-16, Mac VM screenshot with the real Dock stopped)
 Through IconServices like the real Dock (dtrace: `ISBundleIcon initWithBundleURL:`, `ISImageDescriptor initWithSize:scale:`, `ISIcon prepareImagesForImageDescriptors:`): `DockIcons.m` calls the private classes through the Objective-C runtime (dlopen of IconServices; on pearOS the IconServices repository serves the same names). An icon that is not cached arrives later (`getCGImageForImageDescriptor:completion:`), so the tile shows a placeholder first. The Trash and the Downloads folder come from `CoreTypes.bundle` icns (`ISIcnsIcon`); `ISTypeIcon` with a trash UTI returns a "?" document (not understood why; the real Dock's way for the Trash is not traced yet). All 18 apps, Finder, Terminal, the Downloads folder and the Trash show their real icons.
 Finding: with the real Dock stopped (`launchctl bootout gui/501/com.apple.Dock.agent`, restore with `bootstrap` + `kickstart`, the job has `RunAtLoad false`) the desktop turns black: **the Dock draws the wallpaper** (its second, desktop-level window). Ours has to do that too.
+
+## Pixel comparison with the real Dock (screenshots of the Mac VM, `research/dock-trace/shot-ours.sh` + `pixdiff.py`; 0 = identical)
+| step | whole screen | Dock strip (bottom 80 rows) |
+|---|---|---|
+| first bar and placeholders | 6.25 | 62 |
+| bar colour (black, alpha 0.906 over the white desktop) | 4.43 | 44 |
+| 25 items (running apps from LaunchServices) + exact fit (bar 36 -> 1244) + dots | 2.02 | 19.9 |
+| icon layer = tile size (38 px visible, like the real one) | **0.54** | **5.04** |
+Above the bar the difference is 0.04: the wallpaper window matches. What still differs: the Calendar icon (the real Dock draws today's date through the app's `docktileplugin`), the badge on System Settings (a notification count), the bar's blurred-material look and its 1 px border.
+Ground truth for positions: the real Dock's accessibility tree (a TCC row for Accessibility was added on the Mac VM like the one for screen capture; backup `/Users/alex/TCC.db.backup-before-accessibility`): list x 36, 1208 wide, items 49.9 apart, separators 22.4; `make check` verifies all of them within 0.6 px. The 25th item is the running application "Install Command Line Developer Tools": the section after the first separator is the running applications that are not in the Dock permanently (LaunchServices: `_LSCopyRunningApplicationArray(0xFFFFFFFE)`), then the recents that are not running.

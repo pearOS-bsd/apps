@@ -7,6 +7,7 @@
 @property (copy) NSString *label, *path, *bundleIdentifier, *tileType;
 @property CGRect frame;                              /* the tile's slot in window coordinates (top-left origin), set by the layout */
 @property CGFloat art;                               /* edge of the icon art */
+@property BOOL running;                              /* a running application (the dot under the icon) */
 @property int kind;                                  /* DOCK_APP, DOCK_SEPARATOR, DOCK_OTHER, DOCK_TRASH (dock_layout.h) */
 @end
 @interface DockModel : NSObject

@@ -3,7 +3,8 @@
 #import <objc/message.h>
 @implementation DockWindow
 { const SkyLightAPI *sl; SLCid cid; int _level; id context; }
-- (instancetype)initWithFrame:(CGRect)frame level:(int)level
+- (instancetype)initWithFrame:(CGRect)frame level:(int)level { return [self initWithFrame: frame level: level options: 0]; }
+- (instancetype)initWithFrame:(CGRect)frame level:(int)level options:(int)options
 {
 	if (!(self = [super init])) return nil;
 	sl = SkyLightLoad(); if (getenv("DOCK_LOG")) NSLog(@"dock: skylight %p newwindow %p region %p", sl, sl ? sl->NewWindowWithOpaqueShapeAndContext : 0, sl ? sl->NewRegionWithRect : 0);
@@ -16,7 +17,7 @@
 	CFTypeRef region = NULL, opaque = NULL; CGRect local = CGRectMake(0, 0, frame.size.width, frame.size.height);
 	sl->NewRegionWithRect(&local, &region); sl->NewRegionWithRect(&local, &opaque);
 	uint64_t tags[1] = { 0 }; SLWid wid = 0;
-	CGError e = sl->NewWindowWithOpaqueShapeAndContext(cid, 5 /* the real Dock passes type 5 (dtrace); 0 and 1 fail with error 1000, 2 makes a window without content */, region, opaque, 0, tags, (float)frame.origin.x, (float)frame.origin.y, 0x40, &wid, (__bridge void *)context);
+	CGError e = sl->NewWindowWithOpaqueShapeAndContext(cid, 5 /* the real Dock passes type 5 (dtrace); 0 and 1 fail with error 1000, 2 makes a window without content */, region, opaque, options, tags, (float)frame.origin.x, (float)frame.origin.y, 0x40, &wid, (__bridge void *)context);
 	if (getenv("DOCK_LOG")) NSLog(@"dock: NewWindow cid %d error %d wid %u region %p", cid, e, wid, region);
 	if (region) CFRelease(region); if (opaque) CFRelease(opaque);
 	if (e != kCGErrorSuccess || !wid) return nil;
