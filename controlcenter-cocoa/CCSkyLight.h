@@ -3,8 +3,9 @@
 #import <CoreFoundation/CoreFoundation.h>
 #import <CoreGraphics/CoreGraphics.h>
 typedef struct {
-	/* (tx, wid, sort key counted from the right edge: real values 0x7ffffff5 / 0x7fffffe1, identifier object, 0x590 / 0x490, 0 / 2) */
-	CGError (*RegisterSortedWindow)(CFTypeRef tx, uint32_t wid, uint32_t key, CFTypeRef ident, uint32_t a4, uint32_t a5);
+	/* VERIFIED with REA (Ghidra pseudo-code of SkyLight's _SLSTransactionSystemStatusBarRegisterSortedWindow, x86_64): encodes opcode 0x3a, then packed64(wid), packed64(key), CFString(ident), packed64(a),
+	 * packed64(b), the float (packed as integer when it is integral, else 0x48 + float), packed64(last).  Real call values (dtrace): key 0x7ffffff5 / 0x7fffffe1, a 0x590 / 0x490, b 0 / 2; f and last not captured yet (f is in xmm0). */
+	CGError (*RegisterSortedWindow)(CFTypeRef tx, uint32_t wid, int key, CFStringRef ident, uint32_t a, int b, float f, uint32_t last);
 	/* (tx, wid, tags*, tagsize 0x40, clear?) real: called twice per window (clear 0 and 1) */
 	CGError (*SetWindowTags)(CFTypeRef tx, uint32_t wid, uint64_t *tags, int tagSize, int clear);
 	CGError (*GetWindowPreferredPosition)(int cid, uint32_t wid, void *out);     /* out = 16 bytes seen */

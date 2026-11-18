@@ -6,6 +6,7 @@
 - (instancetype)initWithFrame:(CGRect)frame level:(int)level;
 - (instancetype)initWithFrame:(CGRect)frame level:(int)level options:(int)options;    /* options 0: the Dock window, 1: the wallpaper window (what the real Dock passes, dtrace) */     /* frame in screen points, origin top-left (what SLSNewWindow... takes, checked with CGWindowListCopyWindowInfo) */
 - (void)orderIn;
+- (id)caContext;                                          /* the CAContext (private class) of the window */
 - (void)setRootLayer:(CALayer *)layer;                  /* the content: bound to the window through its CAContext, then committed */
 + (CGRect)mainDisplayBounds;                                         /* SLSGetDisplayBounds of SLSMainDisplayID */
 @end

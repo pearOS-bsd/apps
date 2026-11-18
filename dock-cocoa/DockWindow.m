@@ -38,6 +38,7 @@
 	((void (*)(id, SEL, id))objc_msgSend)(context, sel_registerName("setLayer:"), layer);          /* after the window exists, like the real Dock */
 	[CATransaction flush];
 }
+- (id)caContext { return context; }
 - (void)orderIn
 {
 	if (!sl || !_windowID) return;

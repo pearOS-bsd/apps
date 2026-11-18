@@ -3,6 +3,7 @@
 #import "../dock-cocoa/DockWindow.h"
 #import "../dock-cocoa/SkyLightAPI.h"
 #import <CoreText/CoreText.h>
+#import <objc/message.h>
 #import <QuartzCore/QuartzCore.h>
 
 enum { ItemSpotlight, ItemControl, ItemClock };
@@ -62,6 +63,15 @@ static CGImageRef render(int item, CGSize s)
 		CALayer *l = [CALayer layer]; l.frame = CGRectMake(0, 0, kFrames[i].size.width, kFrames[i].size.height);
 		l.contentsGravity = kCAGravityResize; layers[i] = l;
 		[wins[i] setRootLayer: l];
+		{	/* the CAContext calls of the real process (trace): layer, contents format, colour space, GPU registry id */
+			id ctx = [wins[i] caContext];
+			(void)((id (*)(id, SEL))objc_msgSend)(ctx, sel_registerName("layer"));
+			((void (*)(id, SEL, id))objc_msgSend)(ctx, sel_registerName("setContentsFormat:"), @"RGBA8");
+			CGColorSpaceRef srgb = CGColorSpaceCreateWithName(kCGColorSpaceSRGB);
+			((void (*)(id, SEL, CGColorSpaceRef))objc_msgSend)(ctx, sel_registerName("setColorSpace:"), srgb); CGColorSpaceRelease(srgb);
+			uint64_t gpu = ((uint64_t (*)(id, SEL))objc_msgSend)(ctx, sel_registerName("GPURegistryID"));
+			((void (*)(id, SEL, uint64_t))objc_msgSend)(ctx, sel_registerName("setGPURegistryID:"), gpu);
+		}
 		int cid = sl->MainConnectionID(); uint32_t wid = wins[i].windowID;
 		if (cc->SetWindowClientPerceivedType) cc->SetWindowClientPerceivedType(cid, wid, 5);
 		if (cc->SetWindowEventMask) cc->SetWindowEventMask(cid, wid, 0xee5cffde);
@@ -71,7 +81,7 @@ static CGImageRef render(int item, CGSize s)
 			uint64_t tags[1] = { 0 };
 			if (cc->SetWindowTags) { cc->SetWindowTags(tx, wid, tags, 0x40, 0); cc->SetWindowTags(tx, wid, tags, 0x40, 1); }
 			sl->TransactionSetWindowLevel(tx, wid, 25);
-			if (cc->RegisterSortedWindow) cc->RegisterSortedWindow(tx, wid, kKeys[i], (__bridge CFTypeRef)[NSString stringWithFormat: @"com.pearos.controlcenter.item%d", i], i == ItemClock ? 0x590 : 0x490, i == ItemClock ? 0 : 2);
+			if (cc->RegisterSortedWindow) cc->RegisterSortedWindow(tx, wid, kKeys[i], (__bridge CFStringRef)[NSString stringWithFormat: @"com.pearos.controlcenter.item%d", i], i == ItemClock ? 0x590 : 0x490, i == ItemClock ? 0 : 2, (float)kFrames[i].size.width, 0);
 			sl->TransactionOrderWindow(tx, wid, 1, 0);
 			sl->TransactionCommit(tx, 1); CFRelease(tx);
 		}
