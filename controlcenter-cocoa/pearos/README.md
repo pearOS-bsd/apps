@@ -1,0 +1,18 @@
+# ControlCenter on pearOS
+
+How `apps/controlcenter-cocoa` is installed and started on pearOS (the Mac frameworks it links come from the owner's Mac through `macdeps`; the binary and its sources are ours, BSD-2-Clause).
+
+## Install layout
+`/System/Library/CoreServices/ControlCenter.app` (our bundle: `Contents/MacOS/ControlCenter`, `Contents/Info.plist` with `com.apple.controlcenter`, `LSUIElement`). The Apple one is never installed on pearOS, so the path is free.
+
+## Services (launchd job)
+`pearos/com.apple.controlcenter.plist` declares the same MachServices as Apple's job (`com.apple.controlcenter.ccutil`, `.controlcentermodule`, `.show.toggles`, `.statusitems`, `com.apple.SystemBanner`, `com.apple.SystemBannerService`). The launchd of `d/darwin` takes at most 6 names per stub and 256 programs.
+
+## Build
+Today: a Mach-O built on the Mac VM (`research/cc-trace/deploy-ours.sh`, `make` here), copied to the image. Wanted: a build on FreeBSD with clang + ld64.lld and `-undefined dynamic_lookup` like `/open` (`open/build-appkit-bsd.sh`): needs headers for QuartzCore, CoreText, ImageIO, xpc, IOKit/ps, ApplicationServices that the open SDK tree (`dyld/tools/sdk`) does not have yet.
+
+## Status of the run on the ISO test VM (2026-11-18)
+Setup used (ISO test VM, `~/.pear/isotest`, ssh port 2224, cache disk on a virtio drive mounted at /System/Volumes): the thin Mac `dyld` installed at `/usr/lib/dyld` through a tmpfs + unionfs over `/usr/lib` (the ISO root is cd9660, read-only), `binmiscctl disable macho64 / machofat`, `kern.darwinator.{dyld=1,two_volumes=2,fast_sleep_ms=5}`, our `ControlCenter.app` built on the Mac VM copied to `~/cc` (chmod +x).
+1. **Found and fixed (darwinator, `src/syscalls_event.c`): `getfsstat64` looped forever.** Two causes: the root of the ISO is cd9660, but the "second volume" logic only recognised ufs / zfs roots (count of the first pass one more than the entries of the second, so dyld never settled): now the root volume is the mount on `/`, whatever the file system; and the buffer of the second pass was `maxn-1` entries, which cut off the last real mounts when msdosfs mounts (EFI partition, cache disk) came before them: now there is room for them. The module was rebuilt on the lab VM from the releng/14.5 kernel sources and loaded in the ISO VM: the loop is gone.
+2. **Next blocker:** `dyld: Library not loaded: /System/Library/Frameworks/Foundation.framework/Versions/C/Foundation ... (slice is not valid mach-o file)`. The ISO installs GNUstep stand-ins (ELF) at the Mac framework paths (`iso/manifest/frameworks.txt`), and the Mac dyld looks at that file instead of taking the library from the shared cache (the cache disk is there, `shared_region_check_np` is called). To do: make dyld take system libraries from the cache (the macOS 26 cache has them as "not expected on disk": check why dyld prefers the disk file, `kern.darwinator.use_cache`, the shared-region mapping of the cache from the disk's path), or keep the stand-ins out of the paths the cache provides when the Mac stack is used.
+3. Then: services (launchd with the job plist here), wsd as SkyLight server, the CA render stub, as for the Dock/Finder (`d/session/pearos-desktop.sh`).
