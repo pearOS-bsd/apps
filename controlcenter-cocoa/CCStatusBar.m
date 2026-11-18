@@ -41,6 +41,7 @@ static CGImageRef render(int item, CGSize s)
 	} else {                                               /* "Wed Nov 18 04:28" */
 		NSDateFormatter *f = [NSDateFormatter new]; f.dateFormat = @"EEE MMM d  HH:mm"; f.dateFormat = @"EEE MMM d HH:mm";
 		NSString *t = [f stringFromDate: [NSDate date]];
+		if (!t.length) { char b[64]; time_t now = time(NULL); struct tm tm; localtime_r(&now, &tm); strftime(b, sizeof b, "%a %b %e %H:%M", &tm); t = [NSString stringWithUTF8String: b] ?: @""; }          /* pearOS: NSDateFormatter gives nil when ICU's data is missing */
 		CTFontRef font = CTFontCreateUIFontForLanguage(kCTFontUIFontSystem, 13, NULL);
 		NSDictionary *a = @{ (id)kCTFontAttributeName: (__bridge id)font, (id)kCTForegroundColorFromContextAttributeName: @YES };
 		CTLineRef line = CTLineCreateWithAttributedString((__bridge CFAttributedStringRef)[[NSAttributedString alloc] initWithString: t attributes: a]);
