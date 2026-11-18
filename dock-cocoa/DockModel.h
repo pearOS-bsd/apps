@@ -14,6 +14,8 @@
 @property int section;                               /* 0 applications | 1 running / recent | 2 folders and Trash */
 @property (weak) CALayer *iconLayer;                 /* the layer that shows the icon (set by DockView) */
 @property (weak) CALayer *badgeLayer, *dotLayer, *sepLayer;     /* the other layers of the tile (set by DockView): magnification moves them */
+@property CGFloat bounce;                            /* how far the icon is lifted by the launch bounce (DockBounce) */
+@property BOOL magnified;                            /* the magnification code positions the icon (it includes the bounce) */
 @property CGRect baseFrame;                          /* the slot at rest (frame follows the magnified slot while the pointer is over the Dock) */
 @property CGRect baseIcon;                           /* the icon layer at rest (set by DockView) */
 @property int kind;                                  /* DOCK_APP, DOCK_SEPARATOR, DOCK_OTHER, DOCK_TRASH (dock_layout.h) */

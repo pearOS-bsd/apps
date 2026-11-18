@@ -3,6 +3,7 @@
 #import "DockWallpaper.h"
 #import "DockHover.h"
 #import "DockMagnify.h"
+#import "DockBounce.h"
 #import "DockInput.h"
 #import "DockServer.h"
 #import "DockNotify.h"
@@ -28,7 +29,7 @@
 		const SkyLightAPI *sl = SkyLightLoad(); int cid = sl ? sl->MainConnectionID() : 0; CFTypeRef tx = sl && sl->TransactionCreate ? sl->TransactionCreate(cid) : NULL;
 		if (tx) { sl->TransactionOrderWindow(tx, wid, 0 /* out */, 0); CGError e = sl->TransactionCommit(tx, 1); CFRelease(tx); NSLog(@"dock: minimize request window %u \"%@\" animate %d -> order out: error %d", wid, title, animate, e); }
 	});
-	hover = [[DockHover alloc] initWithController: self]; magnify = [[DockMagnify alloc] initWithController: self];
+	hover = [[DockHover alloc] initWithController: self]; magnify = [[DockMagnify alloc] initWithController: self]; DockBounceInstall(self);
 	input = [[DockInput alloc] initWithController: self];
 	/* running applications and badges change while the Dock runs: look again every 1.5 s (SCAFFOLDING: the real Dock is told by LaunchServices / usernoted) */
 	signature = [self runtimeSignature];

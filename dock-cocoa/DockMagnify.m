@@ -29,7 +29,7 @@ static double G(double d)                       /* the magnification profile of 
 	CGFloat target = now ? 1 : 0; CGFloat prev = str;
 	str += (target - str) * 0.35; if (fabs(target - str) < 0.01) str = target;      /* eased: about 0.1 s */
 	CGFloat mouse = ori == 0 ? p.x : p.y; if (now) lastMouse = mouse;
-	if (str == 0 && prev == 0 && !dirty) { m.magExtra = 0; return; }
+	if (str == 0 && prev == 0 && !dirty) { m.magExtra = 0; for (DockTile *t0 in m.tiles) t0.magnified = NO; return; }
 	CGFloat mx = lastMouse;
 	NSArray<DockTile *> *tiles = m.tiles; NSUInteger n = tiles.count; if (!n) return;
 	double sl[n], c[n], base[n]; double delta = extra, sepgrow = 0.415 * delta * str;
@@ -50,13 +50,13 @@ static double G(double d)                       /* the magnification profile of 
 	double padHi = (ori == 0 ? CGRectGetMaxX(bar0) : CGRectGetMaxY(bar0)) - (ori == 0 ? CGRectGetMaxX(tiles[n - 1].baseFrame) : CGRectGetMaxY(tiles[n - 1].baseFrame));
 	[CATransaction begin]; [CATransaction setDisableActions: YES];
 	for (NSUInteger i = 0; i < n; i++) {
-		DockTile *t = tiles[i]; CGRect b = t.baseFrame; double g = G(c[i] - mx) * str, s = t.kind == DOCK_SEPARATOR ? 0 : tile + extra * g;
+		DockTile *t = tiles[i]; t.magnified = str > 0; CGRect b = t.baseFrame; double g = G(c[i] - mx) * str, s = t.kind == DOCK_SEPARATOR ? 0 : tile + extra * g;
 		CGRect f = b; if (ori == 0) { f.origin.x = pos; f.size.width = sl[i]; } else { f.origin.y = pos; f.size.height = sl[i]; } t.frame = f;
 		double mid = pos + sl[i] / 2;
 		if (t.kind == DOCK_SEPARATOR) { CGRect s0 = t.sepLayer.frame; if (ori == 0) s0.origin.x = mid - 0.5; else s0.origin.y = mid - 0.5; t.sepLayer.frame = s0; }
 		else if (t.iconLayer) {
 			CGRect b0 = t.baseIcon, a = b0; double a0 = b0.size.width, sz = round(s); if (sz < 1) sz = a0;
-			if (ori == 0) { a.size = CGSizeMake(sz, sz); a.origin.x = round(mid - sz / 2); a.origin.y = b0.origin.y + a0 - sz; }                        /* the bottom stays on the baseline */
+			if (ori == 0) { a.size = CGSizeMake(sz, sz); a.origin.x = round(mid - sz / 2); a.origin.y = b0.origin.y + a0 - sz - t.bounce; }                        /* the bottom stays on the baseline (plus the launch bounce) */
 			else { a.size = CGSizeMake(sz, sz); a.origin.y = round(mid - sz / 2); a.origin.x = ori == 1 ? b0.origin.x : b0.origin.x + a0 - sz; }          /* away from the edge */
 			t.iconLayer.frame = a;
 			if (t.badgeLayer) { CGRect bf = t.badgeLayer.frame; bf.origin.x = a.origin.x + a.size.width - bf.size.width - 2; bf.origin.y = a.origin.y; t.badgeLayer.frame = bf; }

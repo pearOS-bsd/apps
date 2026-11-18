@@ -1,10 +1,12 @@
 #import "DockActions.h"
 #import "../dock/dock_layout.h"
+#import "DockBounce.h"
 #import <CoreServices/CoreServices.h>
 #import <ApplicationServices/ApplicationServices.h>
 void DockOpenTile(DockTile *t)
 {
 	NSString *path = t.kind == DOCK_TRASH ? [NSHomeDirectory() stringByAppendingPathComponent: @".Trash"] : t.path; if (!path.length) return;
+	DockBounceStart(t);
 	NSURL *u = [NSURL fileURLWithPath: path];
 #pragma clang diagnostic push
 #pragma clang diagnostic ignored "-Wdeprecated-declarations"
