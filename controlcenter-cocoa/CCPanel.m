@@ -1,159 +1,170 @@
 #import "CCPanel.h"
 #import "CCSkyLight.h"
+#import "CCDraw.h"
+#import "CCGallery.h"
 #import "../dock-cocoa/DockWindow.h"
 #import "../dock-cocoa/SkyLightAPI.h"
-#import <CoreText/CoreText.h>
 #import <QuartzCore/QuartzCore.h>
-#import <dlfcn.h>
 
-/* window of the real panel: 800,0 656 x 964 (level 22; larger than the panel: room for the shadow, partly off screen); the panel itself x 966..1274, y 34..533 */
+NSString *const CCEditModeChanged = @"CCEditModeChanged";
+/* window of the real panel: 800,0 656 x 964 (level 22; larger than the panel: room for the shadow, partly off screen); the panel x 966..1274, from y 34 */
 static const CGRect kWindow = { {800, 0}, {656, 964} };
-static const CGRect kPanel = { {966, 34}, {308, 499} };
-/* appearance: SLSGetAppearanceThemeLegacy (1 = dark); light-mode values sampled from the real panel (2026-11-18, same VM, no GPU: flat colours) */
-static BOOL darkTheme(void)
-{
-	static int (*get)(void); if (!get) { void *h = dlopen("/System/Library/PrivateFrameworks/SkyLight.framework/SkyLight", RTLD_LAZY); if (h) get = dlsym(h, "SLSGetAppearanceThemeLegacy"); }
-	return get ? get() != 0 : YES;
-}
-static void setDarkTheme(BOOL dark)
-{
-	static void (*set)(int); if (!set) { void *h = dlopen("/System/Library/PrivateFrameworks/SkyLight.framework/SkyLight", RTLD_LAZY); if (h) set = dlsym(h, "SLSSetAppearanceThemeLegacy"); }
-	if (set) set(dark ? 1 : 0);
-}
-typedef struct { CGRect r; CGFloat radius; int kind; const char *title, *sub; } Tile;
-enum { KWifi, KBluetooth, KAirDrop, KNowPlaying, KStage, KMirror, KAppearance, KShot, KFocus, KDisplay, KSound, KEdit };
-static const Tile kTiles[] = {
-	{ {974, 42, 140, 63}, 31.5, KWifi, "Wi-Fi", "Off" }, { {974, 118, 140, 63}, 31.5, KBluetooth, "Bluetooth", "Off" }, { {974, 194, 140, 63}, 31.5, KAirDrop, "AirDrop", "Off" },
-	{ {1126, 42, 140, 140}, 24, KNowPlaying, "Not Playing", NULL }, { {1126, 194, 63, 63}, 31.5, KStage, NULL, NULL }, { {1203, 194, 63, 63}, 31.5, KMirror, NULL, NULL },
-	{ {974, 270, 63, 63}, 31.5, KAppearance, NULL, NULL }, { {1051, 270, 63, 63}, 31.5, KShot, NULL, NULL }, { {1126, 270, 140, 63}, 31.5, KFocus, NULL, NULL },
-	{ {974, 346, 292, 63}, 24, KDisplay, "Display", NULL }, { {974, 422, 292, 63}, 24, KSound, "Sound", NULL }, { {1074, 502, 93, 23}, 11.5, KEdit, "Edit Controls", NULL },
-};
-static CGColorRef grey(CGFloat v, CGFloat a)     /* same colour space as the bitmap (device RGB): values equal the screenshot's pixel values */
-{
-	static CGColorSpaceRef cs; if (!cs) cs = CGColorSpaceCreateDeviceRGB();
-	CGFloat c[4] = { v / 255.0, v / 255.0, v / 255.0, a }; return CGColorCreate(cs, c);
-}
+static const CGFloat kPanelX = 966, kPanelY = 34, kPanelW = 308;
 
-static void rrect(CGContextRef c, CGRect r, CGFloat rad) { CGPathRef p = CGPathCreateWithRoundedRect(r, rad, rad, NULL); CGContextAddPath(c, p); CFRelease(p); }
-static void text(CGContextRef c, NSString *s, CGFloat x, CGFloat baseline, CGFloat size, BOOL bold, CGFloat white, CGFloat align /* 0 left, 0.5 centre */)
-{
-	CTFontRef f = CTFontCreateUIFontForLanguage(bold ? kCTFontUIFontEmphasizedSystem : kCTFontUIFontSystem, size, NULL);
-	CGColorRef col = grey(white, 1);
-	NSDictionary *a = @{ (id)kCTFontAttributeName: (__bridge id)f, (id)kCTForegroundColorAttributeName: (__bridge id)col };
-	CTLineRef l = CTLineCreateWithAttributedString((__bridge CFAttributedStringRef)[[NSAttributedString alloc] initWithString: s attributes: a]);
-	double w = CTLineGetTypographicBounds(l, NULL, NULL, NULL);
-	CGContextSaveGState(c); CGContextSetTextMatrix(c, CGAffineTransformMakeScale(1, -1)); CGContextSetTextPosition(c, x - w * align, baseline); CTLineDraw(l, c); CGContextRestoreGState(c);
-	CFRelease(l); CFRelease(f); CGColorRelease(col);
-}
-static void glyphCircle(CGContextRef c, CGPoint ctr, CGFloat d, CGFloat v) { CGColorRef col = grey(v, 1); CGContextSetFillColorWithColor(c, col); CGColorRelease(col); CGContextFillEllipseInRect(c, CGRectMake(ctr.x - d / 2, ctr.y - d / 2, d, d)); }
-static void arcs(CGContextRef c, CGPoint o, int n, CGFloat r0, CGFloat step)    /* Wi-Fi / AirDrop style arcs, centre o */
-{
-	for (int i = 0; i < n; i++) { CGContextAddArc(c, o.x, o.y, r0 + step * i, -M_PI * 0.78, -M_PI * 0.22, 0); CGContextStrokePath(c); }
-}
-static void sun(CGContextRef c, CGPoint o, CGFloat r, BOOL big)
-{
-	CGContextSetLineWidth(c, big ? 1.3 : 1.1); CGContextStrokeEllipseInRect(c, CGRectMake(o.x - r, o.y - r, 2 * r, 2 * r));
-	for (int i = 0; i < 8; i++) { CGFloat a = i * M_PI / 4; CGContextMoveToPoint(c, o.x + cos(a) * (r + 2.5), o.y + sin(a) * (r + 2.5)); CGContextAddLineToPoint(c, o.x + cos(a) * (r + (big ? 5 : 4)), o.y + sin(a) * (r + (big ? 5 : 4))); }
-	CGContextStrokePath(c);
-}
-static void speaker(CGContextRef c, CGPoint o, CGFloat s, int waves)
-{
-	CGContextMoveToPoint(c, o.x - s * 0.6, o.y - s * 0.25); CGContextAddLineToPoint(c, o.x - s * 0.25, o.y - s * 0.25); CGContextAddLineToPoint(c, o.x + s * 0.15, o.y - s * 0.65);
-	CGContextAddLineToPoint(c, o.x + s * 0.15, o.y + s * 0.65); CGContextAddLineToPoint(c, o.x - s * 0.25, o.y + s * 0.25); CGContextAddLineToPoint(c, o.x - s * 0.6, o.y + s * 0.25); CGContextFillPath(c);
-	for (int i = 1; i <= waves; i++) { CGContextAddArc(c, o.x + s * 0.15, o.y, s * (0.35 + 0.28 * i), -0.7, 0.7, 0); CGContextStrokePath(c); }
-}
-
-static CGImageRef renderPanel(void)
-{
-	size_t W = kWindow.size.width, H = kWindow.size.height;
-	CGColorSpaceRef cs = CGColorSpaceCreateDeviceRGB();
-	CGContextRef c = CGBitmapContextCreate(NULL, W, H, 8, 0, cs, kCGImageAlphaPremultipliedFirst | kCGBitmapByteOrder32Little);
-	CGContextTranslateCTM(c, -kWindow.origin.x, H + kWindow.origin.y); CGContextScaleCTM(c, 1, -1);       /* screen coordinates, y down */
-	CGColorRef col;
-	BOOL dark = darkTheme();
-	col = grey(dark ? 61 : 219, 1); CGContextSetFillColorWithColor(c, col); CGColorRelease(col); rrect(c, kPanel, 37); CGContextFillPath(c);
-	CGContextSetLineCap(c, kCGLineCapRound);
-	for (size_t i = 0; i < sizeof kTiles / sizeof *kTiles; i++) {
-		const Tile *t = &kTiles[i]; CGRect r = t->r; CGPoint ctr = CGPointMake(CGRectGetMidX(r), CGRectGetMidY(r));
-		BOOL white = t->kind == KAppearance && dark;           /* the Dark Mode button is white when dark mode is on */
-		col = grey(white ? 255 : (dark ? 111 : 109), 1); CGContextSetFillColorWithColor(c, col); CGColorRelease(col); rrect(c, r, t->radius); CGContextFillPath(c);
-		col = grey(white ? 0 : 255, 1); CGContextSetStrokeColorWithColor(c, col); CGContextSetFillColorWithColor(c, col); CGColorRelease(col); CGContextSetLineWidth(c, 1.6);
-		switch (t->kind) {
-		case KWifi: case KBluetooth: case KAirDrop: {
-			CGPoint ic = CGPointMake(r.origin.x + 31.5, ctr.y); glyphCircle(c, ic, 34, 147);
-			col = grey(255, 1); CGContextSetStrokeColorWithColor(c, col); CGContextSetFillColorWithColor(c, col); CGColorRelease(col);
-			if (t->kind == KBluetooth) { CGContextMoveToPoint(c, ic.x - 4.5, ic.y - 4.5); CGContextAddLineToPoint(c, ic.x + 4.5, ic.y + 4.5); CGContextAddLineToPoint(c, ic.x, ic.y + 9); CGContextAddLineToPoint(c, ic.x, ic.y - 9); CGContextAddLineToPoint(c, ic.x + 4.5, ic.y - 4.5); CGContextAddLineToPoint(c, ic.x - 4.5, ic.y + 4.5); CGContextStrokePath(c); }
-			else { arcs(c, CGPointMake(ic.x, ic.y + 6), t->kind == KWifi ? 3 : 3, 5, 4.5); CGContextFillEllipseInRect(c, CGRectMake(ic.x - 1.5, ic.y + 4.5, 3, 3)); }
-			CGContextMoveToPoint(c, ic.x - 9, ic.y - 8); CGContextAddLineToPoint(c, ic.x + 9, ic.y + 9); CGContextStrokePath(c);                      /* the "off" slash */
-			text(c, [NSString stringWithUTF8String: t->sub], r.origin.x + 56, ctr.y + 13, 12, NO, 255, 0);     /* off: only the state, no title (real panel) */
-			break; }
-		case KNowPlaying: {
-			col = grey(138, 1); CGContextSetFillColorWithColor(c, col); CGColorRelease(col); rrect(c, CGRectMake(r.origin.x + 14, r.origin.y + 12, 40, 40), 8); CGContextFillPath(c);
-			col = grey(255, 1); CGContextSetFillColorWithColor(c, col); CGColorRelease(col);
-			text(c, @"Not Playing", r.origin.x + 14, r.origin.y + 83, 13, YES, 255, 0);
-			CGFloat by = r.origin.y + 111;
-			CGContextMoveToPoint(c, r.origin.x + 62, by - 8); CGContextAddLineToPoint(c, r.origin.x + 62, by + 8); CGContextAddLineToPoint(c, r.origin.x + 71, by); CGContextFillPath(c);     /* play */
-			CGContextMoveToPoint(c, r.origin.x + 60, by - 11); CGContextAddLineToPoint(c, r.origin.x + 60, by + 11); CGContextAddLineToPoint(c, r.origin.x + 80, by); CGContextFillPath(c);
-			col = grey(160, 1); CGContextSetFillColorWithColor(c, col); CGColorRelease(col);
-			for (int s = -1; s <= 1; s += 2) { CGFloat cx = s < 0 ? r.origin.x + 28 : r.origin.x + 108; for (int k = 0; k < 2; k++) { CGFloat x = cx + k * 9 * s * -1; (void)x; } }
-			CGContextMoveToPoint(c, r.origin.x + 38, by - 6); CGContextAddLineToPoint(c, r.origin.x + 38, by + 6); CGContextAddLineToPoint(c, r.origin.x + 28, by); CGContextFillPath(c);
-			CGContextMoveToPoint(c, r.origin.x + 48, by - 6); CGContextAddLineToPoint(c, r.origin.x + 48, by + 6); CGContextAddLineToPoint(c, r.origin.x + 38, by); CGContextFillPath(c);
-			CGContextMoveToPoint(c, r.origin.x + 100, by - 6); CGContextAddLineToPoint(c, r.origin.x + 100, by + 6); CGContextAddLineToPoint(c, r.origin.x + 110, by); CGContextFillPath(c);
-			CGContextMoveToPoint(c, r.origin.x + 110, by - 6); CGContextAddLineToPoint(c, r.origin.x + 110, by + 6); CGContextAddLineToPoint(c, r.origin.x + 120, by); CGContextFillPath(c);
-			break; }
-		case KStage: CGContextStrokeRect(c, CGRectMake(ctr.x - 2, ctr.y - 8, 15, 16)); CGContextFillRect(c, CGRectMake(ctr.x - 13, ctr.y - 8, 3, 3)); CGContextFillRect(c, CGRectMake(ctr.x - 13, ctr.y - 2, 3, 3)); CGContextFillRect(c, CGRectMake(ctr.x - 13, ctr.y + 4, 3, 3)); break;
-		case KMirror: rrect(c, CGRectMake(ctr.x - 13, ctr.y - 10, 18, 14), 2.5); CGContextStrokePath(c); rrect(c, CGRectMake(ctr.x - 5, ctr.y - 4, 18, 14), 2.5); CGContextStrokePath(c); break;
-		case KAppearance: CGContextFillEllipseInRect(c, CGRectMake(ctr.x - 10, ctr.y - 10, 20, 20)); col = grey(dark ? 255 : 0, 1);       /* two-tone disc: black with a white half on the white button, the opposite on the grey one */ CGContextSetFillColorWithColor(c, col); CGColorRelease(col); CGContextAddArc(c, ctr.x, ctr.y, 10, -M_PI / 2, M_PI / 2, 1); CGContextFillPath(c); break;
-		case KShot: rrect(c, CGRectMake(ctr.x - 8, ctr.y - 5, 16, 11), 2); CGContextStrokePath(c); CGContextStrokeEllipseInRect(c, CGRectMake(ctr.x - 3.5, ctr.y - 3, 7, 7)); break;
-		case KFocus: glyphCircle(c, CGPointMake(r.origin.x + 31.5, ctr.y), 34, 147); col = grey(255, 1); CGContextSetFillColorWithColor(c, col); CGColorRelease(col);
-			CGContextAddArc(c, r.origin.x + 31.5, ctr.y, 9, 0.4, 2 * M_PI - 0.4, 0); CGContextAddArc(c, r.origin.x + 36.5, ctr.y - 3, 8, 2 * M_PI - 0.4 - 0.9, 0.4 + 0.9, 1); CGContextFillPath(c); break;
-		case KDisplay: case KSound: {
-			text(c, [NSString stringWithUTF8String: t->title], r.origin.x + 16, r.origin.y + (t->kind == KDisplay ? 23 : 22), 13, YES, 255, 0);
-			BOOL disp = t->kind == KDisplay; CGFloat y = r.origin.y + (t->kind == KDisplay ? 43 : 42), x0 = r.origin.x + (disp ? 36 : 34), x1 = r.origin.x + (disp ? 254 : 216);
-			col = grey(150, 1); CGContextSetFillColorWithColor(c, col); CGContextSetStrokeColorWithColor(c, col); CGColorRelease(col);
-			rrect(c, CGRectMake(x0, y - 2, x1 - x0, 4), 2); CGContextFillPath(c);
-			col = grey(205, 1); CGContextSetFillColorWithColor(c, col); CGContextSetStrokeColorWithColor(c, col); CGColorRelease(col);
-			if (disp) { sun(c, CGPointMake(r.origin.x + 22, y), 2.6, NO); sun(c, CGPointMake(r.origin.x + 268, y), 3.6, YES); }
-			else { speaker(c, CGPointMake(r.origin.x + 20, y), 14, 0); speaker(c, CGPointMake(r.origin.x + 231, y), 14, 2); glyphCircle(c, CGPointMake(r.origin.x + 265, y), 26, 147); col = grey(255, 1); CGContextSetStrokeColorWithColor(c, col); CGColorRelease(col); arcs(c, CGPointMake(r.origin.x + 265, y + 3), 2, 4.5, 4.5); }
-			break; }
-		case KEdit: text(c, @"Edit Controls", ctr.x, ctr.y + 4.5, 13, NO, 255, 0.5); break;
-		}
-	}
-	CGImageRef img = CGBitmapContextCreateImage(c); CGContextRelease(c); CGColorSpaceRelease(cs);
-	return img;
-}
+static CGRect editPill(CGRect panel) { return CGRectMake(1074, CGRectGetMaxY(panel) - 31, 93, 23); }          /* "Edit Controls": 502..525 in a panel ending at 533 */
 
 @implementation CCPanel
-{ DockWindow *win; CALayer *layer; }
+{
+	DockWindow *win; CALayer *layer; BOOL editing; CCGallery *gallery;
+	CCControl *pressed; CGPoint pressPoint; BOOL moved; CCControl *dragSlider; NSTimer *poll;
+}
 - (BOOL)visible { return win != nil; }
-- (BOOL)containsScreenPoint:(CGPoint)p { return win && CGRectContainsPoint(kPanel, p); }
+- (BOOL)editing { return editing; }
+- (CGRect)panelRect
+{
+	int rows = [CCLayout shared].rows; if (editing) rows = MIN(rows + 2, CCMaxRows());
+	CGFloat lastBottom = 42 + (rows - 1) * 76 + 63;
+	return CGRectMake(kPanelX, kPanelY, kPanelW, lastBottom + (editing ? 7 : 48) - kPanelY);
+}
+- (BOOL)containsScreenPoint:(CGPoint)p { return win && (CGRectContainsPoint([self panelRect], p) || [gallery containsScreenPoint: p]); }
+
+/* ---- drawing ---- */
+- (void)drawControl:(CCControl *)ct in:(CGContextRef)c dark:(BOOL)dark
+{
+	const CCCatalogEntry *e = [ct entry]; CGRect r = [ct frame]; CGPoint ctr = CGPointMake(CGRectGetMidX(r), CGRectGetMidY(r));
+	BOOL on = CCIsOn(ct.kind), disc1 = e->w == 1 && e->h == 1; CGFloat radius = (e->h == 1 && e->w <= 2) ? 31.5 : 24;
+	BOOL whiteTile = disc1 && on;                                                 /* a switched-on one-cell toggle is a white disc with a dark glyph (the Dark Mode button of the real panel) */
+	CCFillRRect(c, r, radius, whiteTile ? 255 : (dark ? 111 : 109));
+	CGFloat ink = whiteTile ? 0 : 255; CCFillGrey(c, ink, 1); CGContextSetLineWidth(c, 1.6);
+	switch (ct.kind) {
+	case CCDisplay: case CCSound: case CCKeyboardBrightness: {
+		CCText(c, [NSString stringWithUTF8String: e->title], r.origin.x + 16, r.origin.y + (ct.kind == CCDisplay ? 23 : 22), 13, YES, 255, 0);
+		BOOL disp = ct.kind != CCSound; CGFloat y = r.origin.y + (ct.kind == CCDisplay ? 43 : 42), x0 = r.origin.x + (disp ? 36 : 34), x1 = r.origin.x + (disp ? 254 : 216);
+		CCFillRRect(c, CGRectMake(x0, y - 2, x1 - x0, 4), 2, 150);
+		double v = CCSliderGet(ct.kind); if (v > 0.001) { CCFillRRect(c, CGRectMake(x0, y - 2, (x1 - x0) * v, 4), 2, 235); CCFillDisc(c, CGPointMake(x0 + (x1 - x0) * v, y), 14, 255); }
+		CCFillGrey(c, 205, 1);
+		if (disp) { CCGlyph(c, @"sun.min", CGPointMake(r.origin.x + 22, y), 14); CCGlyph(c, @"sun.max", CGPointMake(r.origin.x + 268, y), 16); }
+		else { CCGlyph(c, @"speaker", CGPointMake(r.origin.x + 20, y), 16); CCGlyph(c, @"speaker.wave", CGPointMake(r.origin.x + 231, y), 16); CCFillDisc(c, CGPointMake(r.origin.x + 265, y), 26, 147); CCFillGrey(c, 255, 1); CCGlyph(c, @"airplay", CGPointMake(r.origin.x + 265, y), 16); }
+		break; }
+	case CCNowPlaying: {
+		CCFillRRect(c, CGRectMake(r.origin.x + 14, r.origin.y + 12, 40, 40), 8, 138);
+		CCText(c, @"Not Playing", r.origin.x + 14, r.origin.y + 83, 13, YES, 255, 0);
+		CGFloat by = r.origin.y + 111; CCFillGrey(c, 255, 1); CCGlyph(c, @"play", CGPointMake(r.origin.x + 70, by), 24);
+		CCFillGrey(c, 160, 1); CCGlyph(c, @"rewind", CGPointMake(r.origin.x + 33, by), 24); CCGlyph(c, @"forward", CGPointMake(r.origin.x + 110, by), 24);
+		break; }
+	default:
+		if (disc1) { CCGlyph(c, [NSString stringWithUTF8String: e->glyph], ctr, 22); }
+		else if (e->h == 2) {                                                    /* big square tile: glyph above, title below */
+			CCGlyph(c, [NSString stringWithUTF8String: e->glyph], CGPointMake(r.origin.x + 26, r.origin.y + 28), 24); CCFillGrey(c, 255, 1);
+			CCText(c, [NSString stringWithUTF8String: e->title], r.origin.x + 14, r.origin.y + r.size.height - 14, 13, YES, 255, 0);
+		} else {                                                                 /* wide: round icon on the left, state or title on the right */
+			CGPoint ic = CGPointMake(r.origin.x + 31.5, ctr.y); BOOL conn = ct.kind == CCWifi || ct.kind == CCBluetooth || ct.kind == CCAirDrop, focus = ct.kind == CCFocus;
+			CCFillDisc(c, ic, 34, (conn || focus) && on ? 0 : 147); if ((conn || focus) && on) { CCFillRGB(c, focus ? 94 : 10, focus ? 92 : 132, focus ? 230 : 255); CGContextFillEllipseInRect(c, CGRectMake(ic.x - 17, ic.y - 17, 34, 34)); }
+			CCFillGrey(c, 255, 1);
+			NSString *g = [NSString stringWithUTF8String: e->glyph]; if (!on && (ct.kind == CCWifi || ct.kind == CCBluetooth)) g = [g stringByAppendingString: @".slash"];
+			CCGlyph(c, g, ic, 20);
+			NSString *st = CCStateText(ct.kind);
+			if (conn) { if (on) { CCText(c, [NSString stringWithUTF8String: e->title], r.origin.x + 56, ctr.y - 1, 13, YES, 255, 0); CCText(c, st ?: @"On", r.origin.x + 56, ctr.y + 14, 12, NO, 230, 0); } else CCText(c, st ?: @"Off", r.origin.x + 56, ctr.y + 13, 12, NO, 255, 0); }
+			else if (focus) { if (on) { CCText(c, @"Focus", r.origin.x + 56, ctr.y - 1, 13, YES, 255, 0); CCText(c, st ?: @"On", r.origin.x + 56, ctr.y + 14, 12, NO, 230, 0); } }
+			else CCText(c, [NSString stringWithUTF8String: e->title], r.origin.x + 56, ctr.y + 4.5, 13, YES, 255, 0);
+		}
+	}
+}
+- (CGImageRef)newImage
+{
+	BOOL dark = CCDarkTheme(); CGRect panel = [self panelRect];
+	CGContextRef c = CCBeginBitmap(kWindow.size, kWindow.origin);
+	CCFillRRect(c, panel, 37, dark ? (editing ? 58 : 61) : 219);
+	CCLayout *lay = [CCLayout shared];
+	for (CCControl *ct in lay.controls) [self drawControl: ct in: c dark: dark];
+	if (editing) {
+		int rows = MIN(lay.rows + 2, CCMaxRows());
+		for (int rw = 0; rw < rows; rw++) for (int cl = 0; cl < 4; cl++) {                      /* empty slots */
+			BOOL used = NO; for (CCControl *ct in lay.controls) { const CCCatalogEntry *e = [ct entry]; if (cl >= ct.col && cl < ct.col + e->w && rw >= ct.row && rw < ct.row + e->h) used = YES; }
+			if (!used) { CGRect r = CCCellRect(cl, rw, 1, 1); CCFillDisc(c, CGPointMake(CGRectGetMidX(r), CGRectGetMidY(r)), 63, dark ? 93 : 190); }
+		}
+		for (CCControl *ct in lay.controls) {                                                  /* the minus badges */
+			CGRect r = [ct frame]; CGPoint b = CGPointMake(r.origin.x + 8, r.origin.y + 8); CCFillDisc(c, b, 19, dark ? 66 : 120); CCFillGrey(c, 255, 1); CGContextSetLineWidth(c, 1.4); CCGlyph(c, @"minus", b, 14);
+		}
+	} else {
+		CGRect p = editPill(panel); CCFillRRect(c, p, 11.5, dark ? 111 : 109); CCText(c, @"Edit Controls", CGRectGetMidX(p), CGRectGetMidY(p) + 4.5, 13, NO, 255, 0.5);
+	}
+	return CCEndBitmap(c);
+}
+- (void)redraw { if (!win) return; CGImageRef img = [self newImage]; layer.contents = (__bridge id)img; CGImageRelease(img); [CATransaction flush]; [gallery redraw]; }
+
+/* ---- window ---- */
 - (void)show
 {
 	const SkyLightAPI *sl = SkyLightLoad(); const CCSkyLight *cc = CCSkyLightLoad(); if (!sl) return;
 	win = [[DockWindow alloc] initWithFrame: kWindow level: 22 options: 0x10000];
 	if (!win) return;
 	layer = [CALayer layer]; layer.frame = CGRectMake(0, 0, kWindow.size.width, kWindow.size.height);
-	CGImageRef img = renderPanel(); layer.contents = (__bridge id)img; CGImageRelease(img);
+	CGImageRef img = [self newImage]; layer.contents = (__bridge id)img; CGImageRelease(img);
 	[win setRootLayer: layer];
-	int cid = sl->MainConnectionID(); uint32_t wid = win.windowID;
-	if (cc->SetWindowClientPerceivedType) cc->SetWindowClientPerceivedType(cid, wid, 5);
+	if (cc->SetWindowClientPerceivedType) cc->SetWindowClientPerceivedType(sl->MainConnectionID(), win.windowID, 5);
 	[win orderIn];
+	__weak CCPanel *w = self; poll = [NSTimer scheduledTimerWithTimeInterval: 1 repeats: YES block: ^(NSTimer *t) { (void)t; [w redraw]; }];       /* states change outside (appearance, preferences) */
 }
-- (void)hide { if (!win) return; const SkyLightAPI *sl = SkyLightLoad(); if (sl && sl->ReleaseWindow) sl->ReleaseWindow(sl->MainConnectionID(), win.windowID); win = nil; layer = nil; }
-- (void)redraw
+- (void)hide
 {
 	if (!win) return;
-	CGImageRef img = renderPanel(); layer.contents = (__bridge id)img; CGImageRelease(img); [CATransaction flush];
-}
-- (BOOL)clickAtScreenPoint:(CGPoint)pt
-{
-	if (!win) return NO;
-	for (size_t i = 0; i < sizeof kTiles / sizeof *kTiles; i++) {
-		if (!CGRectContainsPoint(kTiles[i].r, pt)) continue;
-		if (kTiles[i].kind == KAppearance) { setDarkTheme(!darkTheme()); [self performSelector: @selector(redraw) withObject: nil afterDelay: 0.3]; }
-		return YES;
-	}
-	return CGRectContainsPoint(kPanel, pt);
+	[self setEditing: NO]; [poll invalidate]; poll = nil;
+	const SkyLightAPI *sl = SkyLightLoad(); if (sl && sl->ReleaseWindow) sl->ReleaseWindow(sl->MainConnectionID(), win.windowID); win = nil; layer = nil;
 }
 - (void)toggle { if (win) [self hide]; else [self show]; }
+- (void)setEditing:(BOOL)on
+{
+	if (on == editing) return;
+	editing = on;
+	if (on) gallery = [[CCGallery alloc] initWithPanel: self]; else { [gallery close]; gallery = nil; }
+	[self redraw]; [[NSNotificationCenter defaultCenter] postNotificationName: CCEditModeChanged object: self userInfo: @{ @"editing": @(on) }];
+}
+- (void)scrollGallery:(double)dy { [gallery scrollBy: dy]; }
+- (void)typeInGallery:(NSString *)s { [gallery typeText: s]; }
+- (BOOL)addControl:(CCKind)k { BOOL ok = [[CCLayout shared] add: k]; [self redraw]; return ok; }
+
+/* ---- mouse ---- */
+- (CCControl *)sliderAt:(CGPoint)p { CCControl *c = [[CCLayout shared] controlAtPoint: p]; if (!c) return nil; return (c.kind == CCDisplay || c.kind == CCSound || c.kind == CCKeyboardBrightness) ? c : nil; }
+- (void)setSlider:(CCControl *)c atX:(CGFloat)x
+{
+	CGRect r = [c frame]; BOOL disp = c.kind != CCSound; CGFloat x0 = r.origin.x + (disp ? 36 : 34), x1 = r.origin.x + (disp ? 254 : 216);
+	CCSliderSet(c.kind, MAX(0, MIN(1, (x - x0) / (x1 - x0)))); [self redraw];
+}
+- (BOOL)mouseDown:(CGPoint)p
+{
+	if (!win) return NO;
+	if ([gallery containsScreenPoint: p]) return [gallery mouseDown: p];
+	if (!CGRectContainsPoint([self panelRect], p)) return NO;
+	CCLayout *lay = [CCLayout shared]; CCControl *ct = [lay controlAtPoint: p]; pressed = nil; moved = NO; dragSlider = nil;
+	if (editing) {
+		for (CCControl *c in [lay.controls copy]) { CGRect r = [c frame]; if (hypot(p.x - (r.origin.x + 8), p.y - (r.origin.y + 8)) <= 10) { [lay remove: c]; [self redraw]; return YES; } }
+		pressed = ct; pressPoint = p; return YES;
+	}
+	if (CGRectContainsPoint(editPill([self panelRect]), p)) { [self setEditing: YES]; return YES; }
+	CCControl *s = [self sliderAt: p]; if (s && p.y > [s frame].origin.y + 28) { dragSlider = s; [self setSlider: s atX: p.x]; return YES; }
+	pressed = ct; pressPoint = p; return YES;
+}
+- (BOOL)mouseDragged:(CGPoint)p
+{
+	if (!win) return NO;
+	if (dragSlider) { [self setSlider: dragSlider atX: p.x]; return YES; }
+	if (pressed && hypot(p.x - pressPoint.x, p.y - pressPoint.y) > 4) moved = YES;
+	return pressed != nil;
+}
+- (BOOL)mouseUp:(CGPoint)p
+{
+	if (!win) return NO;
+	if (dragSlider) { dragSlider = nil; return YES; }
+	CCControl *ct = pressed; pressed = nil; if (!ct) return NO;
+	if (editing) {                                                                       /* drag a control to another cell */
+		if (moved) {                                                                    /* the control's top-left follows the pointer; the cell under its centre is the target */
+			CGRect f = [ct frame]; int col = (int)floor((f.origin.x + (p.x - pressPoint.x) - 974 + 31) / 76.33), row = (int)floor((f.origin.y + (p.y - pressPoint.y) - 42 + 31) / 76);
+			[[CCLayout shared] moveControl: ct toCol: col row: row]; [self redraw];
+		}
+		return YES;
+	}
+	if (!moved) { CCPerform(ct.kind); [self performSelector: @selector(redraw) withObject: nil afterDelay: 0.25]; }
+	return YES;
+}
 @end

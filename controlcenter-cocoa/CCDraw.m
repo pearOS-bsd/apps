@@ -1,0 +1,97 @@
+#import "CCDraw.h"
+#import <CoreText/CoreText.h>
+#import <dlfcn.h>
+
+static void *skylight(void) { static void *h; if (!h) h = dlopen("/System/Library/PrivateFrameworks/SkyLight.framework/SkyLight", RTLD_LAZY); return h; }
+BOOL CCDarkTheme(void) { static int (*get)(void); if (!get && skylight()) get = dlsym(skylight(), "SLSGetAppearanceThemeLegacy"); return get ? get() != 0 : YES; }
+void CCSetDarkTheme(BOOL dark) { static void (*set)(int); if (!set && skylight()) set = dlsym(skylight(), "SLSSetAppearanceThemeLegacy"); if (set) set(dark ? 1 : 0); }
+
+static CGColorSpaceRef rgb(void) { static CGColorSpaceRef cs; if (!cs) cs = CGColorSpaceCreateDeviceRGB(); return cs; }
+CGContextRef CCBeginBitmap(CGSize size, CGPoint origin)
+{
+	CGContextRef c = CGBitmapContextCreate(NULL, size.width, size.height, 8, 0, rgb(), kCGImageAlphaPremultipliedFirst | kCGBitmapByteOrder32Little);
+	CGContextTranslateCTM(c, -origin.x, size.height + origin.y); CGContextScaleCTM(c, 1, -1); CGContextSetLineCap(c, kCGLineCapRound); CGContextSetLineJoin(c, kCGLineJoinRound);
+	return c;
+}
+CGImageRef CCEndBitmap(CGContextRef c) { CGImageRef i = CGBitmapContextCreateImage(c); CGContextRelease(c); return i; }
+void CCFillGrey(CGContextRef c, CGFloat v, CGFloat a)
+{
+	CGFloat k[4] = { v / 255, v / 255, v / 255, a }; CGColorRef col = CGColorCreate(rgb(), k);
+	CGContextSetFillColorWithColor(c, col); CGContextSetStrokeColorWithColor(c, col); CGColorRelease(col);
+}
+void CCFillRGB(CGContextRef c, int r, int g, int b)
+{
+	CGFloat k[4] = { r / 255.0, g / 255.0, b / 255.0, 1 }; CGColorRef col = CGColorCreate(rgb(), k);
+	CGContextSetFillColorWithColor(c, col); CGContextSetStrokeColorWithColor(c, col); CGColorRelease(col);
+}
+void CCRRect(CGContextRef c, CGRect r, CGFloat radius) { CGFloat m = MIN(r.size.width, r.size.height) / 2; if (radius > m) radius = m; CGPathRef p = CGPathCreateWithRoundedRect(r, radius, radius, NULL); CGContextAddPath(c, p); CFRelease(p); }
+void CCFillRRect(CGContextRef c, CGRect r, CGFloat radius, CGFloat grey) { CCFillGrey(c, grey, 1); CCRRect(c, r, radius); CGContextFillPath(c); }
+void CCFillDisc(CGContextRef c, CGPoint ctr, CGFloat d, CGFloat grey) { CCFillGrey(c, grey, 1); CGContextFillEllipseInRect(c, CGRectMake(ctr.x - d / 2, ctr.y - d / 2, d, d)); }
+static CTLineRef line(NSString *s, CGFloat size, BOOL bold, CGFloat grey)
+{
+	CTFontRef f = CTFontCreateUIFontForLanguage(bold ? kCTFontUIFontEmphasizedSystem : kCTFontUIFontSystem, size, NULL);
+	CGFloat k[4] = { grey / 255, grey / 255, grey / 255, 1 }; CGColorRef col = CGColorCreate(rgb(), k);
+	NSDictionary *a = @{ (id)kCTFontAttributeName: (__bridge id)f, (id)kCTForegroundColorAttributeName: (__bridge id)col };
+	CTLineRef l = CTLineCreateWithAttributedString((__bridge CFAttributedStringRef)[[NSAttributedString alloc] initWithString: s ?: @"" attributes: a]);
+	CFRelease(f); CGColorRelease(col); return l;
+}
+double CCTextWidth(NSString *s, CGFloat size, BOOL bold) { CTLineRef l = line(s, size, bold, 0); double w = CTLineGetTypographicBounds(l, NULL, NULL, NULL); CFRelease(l); return w; }
+void CCText(CGContextRef c, NSString *s, CGFloat x, CGFloat baseline, CGFloat size, BOOL bold, CGFloat grey, CGFloat align)
+{
+	CTLineRef l = line(s, size, bold, grey); double w = CTLineGetTypographicBounds(l, NULL, NULL, NULL);
+	CGContextSaveGState(c); CGContextSetTextMatrix(c, CGAffineTransformMakeScale(1, -1)); CGContextSetTextPosition(c, x - w * align, baseline); CTLineDraw(l, c); CGContextRestoreGState(c); CFRelease(l);
+}
+
+/* ---- glyphs: simple vector drawings, 1.6 pt strokes, centred; unit = size / 24 ---- */
+static void arcs(CGContextRef c, CGPoint o, int n, CGFloat r0, CGFloat step, CGFloat a0, CGFloat a1) { for (int i = 0; i < n; i++) { CGContextAddArc(c, o.x, o.y, r0 + step * i, a0, a1, 0); CGContextStrokePath(c); } }
+static void tri(CGContextRef c, CGPoint a, CGPoint b, CGPoint d) { CGContextMoveToPoint(c, a.x, a.y); CGContextAddLineToPoint(c, b.x, b.y); CGContextAddLineToPoint(c, d.x, d.y); CGContextFillPath(c); }
+void CCGlyph(CGContextRef c, NSString *n, CGPoint o, CGFloat size)
+{
+	CGFloat u = size / 24.0; CGContextSaveGState(c); CGContextTranslateCTM(c, o.x, o.y); CGContextScaleCTM(c, u, u); CGContextSetLineWidth(c, 1.7);
+	if ([n hasPrefix: @"wifi"] || [n isEqual: @"airdrop"]) {
+		arcs(c, CGPointMake(0, 6), 3, 5.5, 5, -M_PI * 0.80, -M_PI * 0.20); CGContextFillEllipseInRect(c, CGRectMake(-1.8, 4.4, 3.6, 3.6));
+		if ([n hasSuffix: @".slash"] || [n isEqual: @"airdrop"]) { CGContextMoveToPoint(c, -10, -9); CGContextAddLineToPoint(c, 10, 10); CGContextStrokePath(c); }
+	} else if ([n hasPrefix: @"bluetooth"]) {
+		CGContextMoveToPoint(c, -5, -5); CGContextAddLineToPoint(c, 5, 5); CGContextAddLineToPoint(c, 0, 10); CGContextAddLineToPoint(c, 0, -10); CGContextAddLineToPoint(c, 5, -5); CGContextAddLineToPoint(c, -5, 5); CGContextStrokePath(c);
+		if ([n hasSuffix: @".slash"]) { CGContextMoveToPoint(c, -9, -9); CGContextAddLineToPoint(c, 9, 10); CGContextStrokePath(c); }
+	} else if ([n isEqual: @"moon"]) {
+		CGContextAddArc(c, 0, 0, 10, 0.45, 2 * M_PI - 0.45, 0); CGContextAddArc(c, 5, -4, 9, 2 * M_PI - 0.45 - 0.8, 0.45 + 0.8, 1); CGContextFillPath(c);
+	} else if ([n isEqual: @"stage"]) {
+		CGContextStrokeRect(c, CGRectMake(-2, -9, 15, 18)); for (int i = 0; i < 3; i++) CGContextFillRect(c, CGRectMake(-13, -9 + i * 7, 3.4, 3.4));
+	} else if ([n isEqual: @"mirror"]) {
+		CCRRect(c, CGRectMake(-13, -11, 19, 15), 3); CGContextStrokePath(c); CCRRect(c, CGRectMake(-5, -4, 19, 15), 3); CGContextStrokePath(c);
+	} else if ([n isEqual: @"camera"]) {
+		CCRRect(c, CGRectMake(-9, -6, 18, 13), 2.5); CGContextStrokePath(c); CGContextStrokeEllipseInRect(c, CGRectMake(-4, -3, 8, 8));
+	} else if ([n isEqual: @"play"]) { tri(c, CGPointMake(-7, -10), CGPointMake(-7, 10), CGPointMake(10, 0));
+	} else if ([n isEqual: @"pause"]) { CGContextFillRect(c, CGRectMake(-7, -9, 5, 18)); CGContextFillRect(c, CGRectMake(2, -9, 5, 18));
+	} else if ([n isEqual: @"forward"]) { tri(c, CGPointMake(-11, -7), CGPointMake(-11, 7), CGPointMake(-1, 0)); tri(c, CGPointMake(-1, -7), CGPointMake(-1, 7), CGPointMake(9, 0));
+	} else if ([n isEqual: @"rewind"]) { tri(c, CGPointMake(11, -7), CGPointMake(11, 7), CGPointMake(1, 0)); tri(c, CGPointMake(1, -7), CGPointMake(1, 7), CGPointMake(-9, 0));
+	} else if ([n isEqual: @"sun.min"] || [n isEqual: @"sun.max"]) {
+		CGFloat r = [n isEqual: @"sun.min"] ? 4 : 5.5; CGContextSetLineWidth(c, 1.4); CGContextStrokeEllipseInRect(c, CGRectMake(-r, -r, 2 * r, 2 * r));
+		for (int i = 0; i < 8; i++) { CGFloat a = i * M_PI / 4; CGContextMoveToPoint(c, cos(a) * (r + 3), sin(a) * (r + 3)); CGContextAddLineToPoint(c, cos(a) * (r + 6), sin(a) * (r + 6)); } CGContextStrokePath(c);
+	} else if ([n hasPrefix: @"speaker"]) {
+		CGContextMoveToPoint(c, -9, -4); CGContextAddLineToPoint(c, -4, -4); CGContextAddLineToPoint(c, 2, -9); CGContextAddLineToPoint(c, 2, 9); CGContextAddLineToPoint(c, -4, 4); CGContextAddLineToPoint(c, -9, 4); CGContextFillPath(c);
+		int w = [n isEqual: @"speaker.wave"] ? 2 : 0; for (int i = 1; i <= w; i++) { CGContextAddArc(c, 2, 0, 3 + 4 * i, -0.7, 0.7, 0); CGContextStrokePath(c); }
+	} else if ([n isEqual: @"airplay"]) { arcs(c, CGPointMake(0, 2), 3, 4, 4.2, -M_PI * 0.9, -M_PI * 0.1); tri(c, CGPointMake(-5, 11), CGPointMake(5, 11), CGPointMake(0, 4));
+	} else if ([n isEqual: @"dark"]) { CGContextFillEllipseInRect(c, CGRectMake(-10, -10, 20, 20));
+	} else if ([n isEqual: @"alarm"] || [n isEqual: @"stopwatch"] || [n isEqual: @"clock"] || [n isEqual: @"timer"]) {
+		CGContextStrokeEllipseInRect(c, CGRectMake(-9, -8, 18, 18)); CGContextMoveToPoint(c, 0, 1); CGContextAddLineToPoint(c, 0, -5); CGContextMoveToPoint(c, 0, 1); CGContextAddLineToPoint(c, 4, 3); CGContextStrokePath(c);
+		if ([n isEqual: @"stopwatch"]) { CGContextMoveToPoint(c, -2.5, -11.5); CGContextAddLineToPoint(c, 2.5, -11.5); CGContextStrokePath(c); }
+		if ([n isEqual: @"alarm"]) { CGContextMoveToPoint(c, -11, -7); CGContextAddLineToPoint(c, -8, -10); CGContextMoveToPoint(c, 11, -7); CGContextAddLineToPoint(c, 8, -10); CGContextStrokePath(c); }
+	} else if ([n isEqual: @"lightbulb"]) { CGContextStrokeEllipseInRect(c, CGRectMake(-7, -11, 14, 14)); CGContextMoveToPoint(c, -3, 6); CGContextAddLineToPoint(c, 3, 6); CGContextMoveToPoint(c, -2, 9); CGContextAddLineToPoint(c, 2, 9); CGContextStrokePath(c);
+	} else if ([n isEqual: @"waveform"]) { for (int i = -3; i <= 3; i++) { CGFloat h = 3 + (4 - abs(i)) * 2.2; CGContextMoveToPoint(c, i * 3.4, -h); CGContextAddLineToPoint(c, i * 3.4, h); } CGContextStrokePath(c);
+	} else if ([n isEqual: @"note"]) { CCRRect(c, CGRectMake(-9, -9, 18, 18), 3.5); CGContextStrokePath(c); CGContextMoveToPoint(c, -5, 4); CGContextAddCurveToPoint(c, -3, -4, 0, 6, 5, -3); CGContextStrokePath(c);
+	} else if ([n isEqual: @"shazam"]) { CGContextStrokeEllipseInRect(c, CGRectMake(-9, -9, 18, 18)); CGContextMoveToPoint(c, 3, -5); CGContextAddCurveToPoint(c, -6, -4, -3, 0, 0, 0); CGContextAddCurveToPoint(c, 3, 0, 6, 4, -3, 5); CGContextStrokePath(c);
+	} else if ([n isEqual: @"screensaver"]) { CCRRect(c, CGRectMake(-10, -8, 20, 15), 2.5); CGContextStrokePath(c); CGContextFillEllipseInRect(c, CGRectMake(-5, -3, 3, 3));
+	} else if ([n isEqual: @"shortcut"]) { CCRRect(c, CGRectMake(-9, -3, 14, 9), 3); CGContextStrokePath(c); CCRRect(c, CGRectMake(-5, -9, 14, 9), 3); CGContextStrokePath(c);
+	} else if ([n isEqual: @"tile"]) { CCRRect(c, CGRectMake(-11, -8, 22, 16), 2.5); CGContextStrokePath(c); CGContextFillRect(c, CGRectMake(-9, -6, 8, 12));
+	} else if ([n isEqual: @"person"]) { CGContextStrokeEllipseInRect(c, CGRectMake(-4, -9, 8, 8)); CGContextAddArc(c, 0, 11, 8, M_PI, 0, 0); CGContextStrokePath(c);
+	} else if ([n isEqual: @"lock"]) { CCRRect(c, CGRectMake(-7, -2, 14, 11), 2.5); CGContextFillPath(c); CGContextAddArc(c, 0, -3, 4.5, M_PI, 0, 0); CGContextStrokePath(c);
+	} else if ([n isEqual: @"keyboard"]) { CCRRect(c, CGRectMake(-11, -6, 22, 12), 2.5); CGContextStrokePath(c); CGContextFillRect(c, CGRectMake(-6, 1, 12, 2));
+	} else if ([n isEqual: @"battery"]) { CCRRect(c, CGRectMake(-11, -5, 21, 10), 2.5); CGContextStrokePath(c); CGContextFillRect(c, CGRectMake(-9, -3, 12, 6));
+	} else if ([n isEqual: @"plus"]) { CGContextMoveToPoint(c, -6, 0); CGContextAddLineToPoint(c, 6, 0); CGContextMoveToPoint(c, 0, -6); CGContextAddLineToPoint(c, 0, 6); CGContextStrokePath(c);
+	} else if ([n isEqual: @"minus"]) { CGContextMoveToPoint(c, -6, 0); CGContextAddLineToPoint(c, 6, 0); CGContextStrokePath(c);
+	} else if ([n isEqual: @"magnifier"]) { CGContextStrokeEllipseInRect(c, CGRectMake(-9, -9, 14, 14)); CGContextMoveToPoint(c, 3, 3); CGContextAddLineToPoint(c, 9, 9); CGContextStrokePath(c);
+	} else { CGContextFillEllipseInRect(c, CGRectMake(-5, -5, 10, 10)); }
+	CGContextRestoreGState(c);
+}

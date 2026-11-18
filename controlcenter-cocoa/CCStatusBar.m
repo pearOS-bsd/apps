@@ -1,5 +1,6 @@
 #import "CCStatusBar.h"
 #import "CCSkyLight.h"
+#import "CCDraw.h"
 #import "../dock-cocoa/DockWindow.h"
 #import "../dock-cocoa/SkyLightAPI.h"
 #import <CoreText/CoreText.h>
@@ -51,7 +52,7 @@ static CGImageRef render(int item, CGSize s)
 }
 
 @implementation CCStatusBar
-{ DockWindow *wins[3]; CALayer *layers[3]; }
+{ DockWindow *wins[3]; CALayer *layers[3]; DockWindow *plusWin; }
 - (void)refresh
 {
 	for (int i = 0; i < 3; i++) {
@@ -60,8 +61,20 @@ static CGImageRef render(int item, CGSize s)
 	}
 	[CATransaction flush];
 }
+- (void)editModeChanged:(NSNotification *)n
+{
+	const SkyLightAPI *sl = SkyLightLoad(); const CCSkyLight *cc = CCSkyLightLoad(); if (!sl) return;
+	if (![n.userInfo[@"editing"] boolValue]) { if (plusWin && sl->ReleaseWindow) sl->ReleaseWindow(sl->MainConnectionID(), plusWin.windowID); plusWin = nil; return; }
+	/* the "+" button of the real edit mode: window 1046,0 48 x 30 (level 25), light rounded rectangle with a dark plus */
+	CGRect f = CGRectMake(1046, 0, 48, 30); plusWin = [[DockWindow alloc] initWithFrame: f level: 25 options: 0x10000]; if (!plusWin) return;
+	CGContextRef c = CCBeginBitmap(f.size, CGPointZero); CCFillRRect(c, CGRectMake(4, 3, 40, 24), 7, 244); CCFillGrey(c, 40, 1); CGContextSetLineWidth(c, 1.6); CCGlyph(c, @"plus", CGPointMake(24, 15), 18);
+	CALayer *l = [CALayer layer]; l.frame = CGRectMake(0, 0, f.size.width, f.size.height); CGImageRef img = CCEndBitmap(c); l.contents = (__bridge id)img; CGImageRelease(img); [plusWin setRootLayer: l];
+	int cid = sl->MainConnectionID(); uint32_t wid = plusWin.windowID; CFTypeRef tx = sl->TransactionCreate(cid);
+	if (tx) { sl->TransactionSetWindowLevel(tx, wid, 25); if (cc->RegisterSortedWindow) cc->RegisterSortedWindow(tx, wid, 0x7fffffc0, CFSTR("com.pearos.controlcenter.add"), 0x490, 2, 48, 0); sl->TransactionOrderWindow(tx, wid, 1, 0); sl->TransactionCommit(tx, 1); CFRelease(tx); }
+}
 - (void)start
 {
+	[[NSNotificationCenter defaultCenter] addObserver: self selector: @selector(editModeChanged:) name: @"CCEditModeChanged" object: nil];
 	const SkyLightAPI *sl = SkyLightLoad(); const CCSkyLight *cc = CCSkyLightLoad();
 	if (!sl) return;
 	for (int i = 0; i < 3; i++) {
