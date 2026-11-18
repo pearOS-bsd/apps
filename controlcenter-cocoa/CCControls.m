@@ -226,21 +226,75 @@ void CCPerform(CCKind k)
 + (instancetype)row:(CCRowType)t title:(NSString *)s on:(BOOL)on action:(void (^)(void))a { CCRow *r = [CCRow new]; r.type = t; r.title = s; r.on = on; r.action = a; return r; }
 @end
 void CCOpenSettings(NSString *pane) { spawn("/usr/bin/open", [[@"x-apple.systempreferences:" stringByAppendingString: pane] UTF8String], NULL, NULL); }
+
+/* ---- lists inside the pages ---- */
+/* CoreAudio through dlsym (pearOS has no CoreAudio yet: then /dev/sndstat through CCPlatform) */
+typedef struct { uint32_t selector, scope, element; } CCAddr;
+static NSArray *audioOutputs(uint32_t *current)       /* [{id, name}] ; *current = the default output device id (0 unknown) */
+{
+	void *h = lib("/System/Library/Frameworks/CoreAudio.framework/CoreAudio"); if (!h) return nil;
+	int (*size)(uint32_t, const CCAddr *, uint32_t, const void *, uint32_t *) = dlsym(h, "AudioObjectGetPropertyDataSize");
+	int (*get)(uint32_t, const CCAddr *, uint32_t, const void *, uint32_t *, void *) = dlsym(h, "AudioObjectGetPropertyData"); if (!size || !get) return nil;
+	CCAddr devs = { 'dev#', 'glob', 0 }, def = { 'dOut', 'glob', 0 }, name = { 'lnam', 'glob', 0 }, streams = { 'stm#', 'outp', 0 };
+	uint32_t n = 0; if (size(1, &devs, 0, NULL, &n) != 0 || !n) return @[]; uint32_t *ids = malloc(n); if (get(1, &devs, 0, NULL, &n, ids) != 0) { free(ids); return @[]; }
+	if (current) { uint32_t d = 0, ds = sizeof d; get(1, &def, 0, NULL, &ds, &d); *current = d; }
+	NSMutableArray *out = [NSMutableArray array];
+	for (uint32_t i = 0; i < n / sizeof *ids; i++) { uint32_t sn = 0; if (size(ids[i], &streams, 0, NULL, &sn) != 0 || !sn) continue; CFStringRef nm = NULL; uint32_t ns = sizeof nm; get(ids[i], &name, 0, NULL, &ns, &nm); [out addObject: @{ @"id": @(ids[i]), @"name": nm ? (__bridge_transfer NSString *)nm : @"Output" }]; }
+	free(ids); return out;
+}
+static void audioSetDefault(uint32_t dev) { void *h = lib("/System/Library/Frameworks/CoreAudio.framework/CoreAudio"); int (*set)(uint32_t, const CCAddr *, uint32_t, const void *, uint32_t, const void *) = h ? dlsym(h, "AudioObjectSetPropertyData") : NULL; CCAddr def = { 'dOut', 'glob', 0 }; if (set) set(1, &def, 0, NULL, sizeof dev, &dev); }
+static NSArray<CCRow *> *soundRows(void)
+{
+	NSMutableArray *rows = [NSMutableArray arrayWithObject: [CCRow row: CCRowHeader title: @"Output" on: NO action: nil]];
+	uint32_t cur = 0; NSArray *outs = audioOutputs(&cur);
+	if (outs) for (NSDictionary *d in outs) { uint32_t i = [d[@"id"] unsignedIntValue]; [rows addObject: [CCRow row: CCRowRadio title: d[@"name"] on: i == cur action: ^{ audioSetDefault(i); }]]; }
+	else { char nm[16][64]; int dflt = -1, n = ccp_sound_list(nm, 16, &dflt); for (int i = 0; i < n; i++) { int k = i; [rows addObject: [CCRow row: CCRowRadio title: [NSString stringWithUTF8String: nm[i]] on: i == dflt action: ^{ ccp_sound_set(k); }]]; } }
+	[rows addObject: [CCRow row: CCRowLink title: @"Sound Settings…" on: NO action: ^{ CCOpenSettings(@"com.apple.Sound-Settings.extension"); }]]; return rows;
+}
+static NSArray<CCRow *> *wifiRows(void)
+{
+	NSMutableArray *rows = [NSMutableArray arrayWithObject: [CCRow row: CCRowSwitch title: @"Wi-Fi" on: CCIsOn(CCWifi) action: ^{ CCPerform(CCWifi); }]];
+	if (CCIsOn(CCWifi)) {
+		[rows addObject: [CCRow row: CCRowHeader title: @"Other Networks" on: NO action: nil]];
+		id i = wifiInterface(); NSString *cur = i ? ((id (*)(id, SEL))objc_msgSend)(i, sel_registerName("ssid")) : nil;
+		if (i) { NSError *e = nil; NSSet *nets = ((id (*)(id, SEL, id, NSError **))objc_msgSend)(i, sel_registerName("scanForNetworksWithName:error:"), nil, &e);
+			for (id n in nets) { NSString *s = ((id (*)(id, SEL))objc_msgSend)(n, sel_registerName("ssid")); if (s.length && rows.count < 9) [rows addObject: [CCRow row: CCRowRadio title: s on: [s isEqual: cur] action: ^{ CCOpenSettings(@"com.apple.wifi-settings-extension"); }]]; } }
+		else { char nm[16][64]; int n = ccp_wifi_scan(nm, 8); for (int k = 0; k < n; k++) [rows addObject: [CCRow row: CCRowRadio title: [NSString stringWithUTF8String: nm[k]] on: NO action: ^{ CCOpenSettings(@"com.apple.wifi-settings-extension"); }]]; }
+	}
+	[rows addObject: [CCRow row: CCRowLink title: @"Wi-Fi Settings…" on: NO action: ^{ CCOpenSettings(@"com.apple.wifi-settings-extension"); }]]; return rows;
+}
+static NSArray<CCRow *> *bluetoothRows(void)
+{
+	NSMutableArray *rows = [NSMutableArray arrayWithObject: [CCRow row: CCRowSwitch title: @"Bluetooth" on: CCIsOn(CCBluetooth) action: ^{ CCPerform(CCBluetooth); }]];
+	if (CCIsOn(CCBluetooth)) {
+		lib("/System/Library/Frameworks/IOBluetooth.framework/IOBluetooth"); Class D = NSClassFromString(@"IOBluetoothDevice");
+		NSArray *paired = D ? ((id (*)(Class, SEL))objc_msgSend)(D, sel_registerName("pairedDevices")) : nil;
+		for (id d in paired) { if (rows.count >= 8) break; NSString *nm = ((id (*)(id, SEL))objc_msgSend)(d, sel_registerName("name")); BOOL on = ((BOOL (*)(id, SEL))objc_msgSend)(d, sel_registerName("isConnected"));
+			[rows addObject: [CCRow row: CCRowRadio title: nm ?: @"Device" on: on action: ^{ if (on) ((int (*)(id, SEL))objc_msgSend)(d, sel_registerName("closeConnection")); else ((int (*)(id, SEL))objc_msgSend)(d, sel_registerName("openConnection")); }]]; }
+	}
+	[rows addObject: [CCRow row: CCRowLink title: @"Bluetooth Settings…" on: NO action: ^{ CCOpenSettings(@"com.apple.BluetoothSettings"); }]]; return rows;
+}
+/* Focus modes: DNDModeConfigurationService (same client identifier and entitlements as the assertion service) */
+static NSArray<CCRow *> *focusRows(void)
+{
+	NSString *cur = CCFocusActiveMode(); NSMutableArray *rows = [NSMutableArray arrayWithObject: [CCRow row: CCRowHeader title: @"Focus" on: NO action: nil]]; NSMutableArray *ids = [NSMutableArray array];
+	lib("/System/Library/PrivateFrameworks/DoNotDisturb.framework/DoNotDisturb"); Class S = NSClassFromString(@"DNDModeConfigurationService");
+	if (S) { id svc = ((id (*)(Class, SEL, id))objc_msgSend)(S, sel_registerName("serviceForClientIdentifier:"), @"com.apple.controlcenter.dnd"); NSError *e = nil; NSArray *cfgs = svc ? ((id (*)(id, SEL, NSError **))objc_msgSend)(svc, sel_registerName("modeConfigurationsReturningError:"), &e) : nil;
+		for (id cfg in ([cfgs isKindOfClass: [NSDictionary class]] ? [(NSDictionary *)cfgs allValues] : cfgs)) { id m = ((id (*)(id, SEL))objc_msgSend)(cfg, sel_registerName("mode")); NSString *mid = ((id (*)(id, SEL))objc_msgSend)(m, sel_registerName("modeIdentifier")), *nm = ((id (*)(id, SEL))objc_msgSend)(m, sel_registerName("name")); if (mid && nm && rows.count < 9) { [ids addObject: mid]; NSString *mm = mid; [rows addObject: [CCRow row: CCRowRadio title: nm on: [cur isEqual: mid] action: ^{ CCFocusSet([cur isEqual: mm] ? nil : mm); }]]; } } }
+	if (!ids.count) for (NSString *m in @[ @"com.apple.donotdisturb.mode.default", @"com.apple.sleep.sleep-mode", @"com.apple.focus.personal-time", @"com.apple.focus.work" ]) [rows addObject: [CCRow row: CCRowRadio title: CCFocusName(m) on: [cur isEqual: m] action: ^{ CCFocusSet([cur isEqual: m] ? nil : m); }]];
+	[rows addObject: [CCRow row: CCRowLink title: @"Focus Settings…" on: NO action: ^{ CCOpenSettings(@"com.apple.Focus-Settings.extension"); }]]; return rows;
+}
 NSArray<CCRow *> *CCPageRows(CCKind k)
 {
 	switch (k) {
-	case CCWifi: return @[ [CCRow row: CCRowSwitch title: @"Wi-Fi" on: CCIsOn(CCWifi) action: ^{ CCPerform(CCWifi); }], [CCRow row: CCRowLink title: @"Wi-Fi Settings…" on: NO action: ^{ CCOpenSettings(@"com.apple.wifi-settings-extension"); }] ];
-	case CCBluetooth: return @[ [CCRow row: CCRowSwitch title: @"Bluetooth" on: CCIsOn(CCBluetooth) action: ^{ CCPerform(CCBluetooth); }], [CCRow row: CCRowLink title: @"Bluetooth Settings…" on: NO action: ^{ CCOpenSettings(@"com.apple.BluetoothSettings"); }] ];
+	case CCWifi: return wifiRows();
+	case CCBluetooth: return bluetoothRows();
 	case CCAirDrop: {
 		NSString *m = CCStateText(CCAirDrop); void (^set)(NSString *) = ^(NSString *v) { CFPreferencesSetAppValue(CFSTR("DiscoverableMode"), (__bridge CFStringRef)v, CFSTR("com.apple.sharingd")); CFPreferencesAppSynchronize(CFSTR("com.apple.sharingd")); };
 		return @[ [CCRow row: CCRowHeader title: @"AirDrop" on: NO action: nil], [CCRow row: CCRowRadio title: @"Contacts Only" on: [m isEqual: @"Contacts Only"] action: ^{ set(@"Contacts Only"); }],
 			[CCRow row: CCRowRadio title: @"Everyone for 10 Minutes" on: [m isEqual: @"Everyone"] action: ^{ set(@"Everyone"); }], [CCRow row: CCRowLink title: @"AirDrop Settings…" on: NO action: ^{ CCOpenSettings(@"com.apple.Sharing-Settings.extension"); }] ]; }
-	case CCFocus: {
-		NSString *cur = CCFocusActiveMode(); NSMutableArray *rows = [NSMutableArray arrayWithObject: [CCRow row: CCRowHeader title: @"Focus" on: NO action: nil]];
-		for (NSString *m in @[ @"com.apple.donotdisturb.mode.default", @"com.apple.sleep.sleep-mode", @"com.apple.focus.personal-time", @"com.apple.focus.work" ])
-			[rows addObject: [CCRow row: CCRowRadio title: CCFocusName(m) on: [cur isEqual: m] action: ^{ CCFocusSet([cur isEqual: m] ? nil : m); }]];
-		[rows addObject: [CCRow row: CCRowLink title: @"Focus Settings…" on: NO action: ^{ CCOpenSettings(@"com.apple.Focus-Settings.extension"); }]]; return rows; }
-	case CCSound: return @[ [CCRow row: CCRowHeader title: @"Output" on: NO action: nil], [CCRow row: CCRowLink title: @"Sound Settings…" on: NO action: ^{ CCOpenSettings(@"com.apple.Sound-Settings.extension"); }] ];
+	case CCFocus: return focusRows();
+	case CCSound: return soundRows();
 	case CCDisplay: return @[ [CCRow row: CCRowHeader title: @"Display" on: NO action: nil], [CCRow row: CCRowSwitch title: @"Dark Mode" on: CCDarkTheme() action: ^{ CCPerform(CCDarkMode); }], [CCRow row: CCRowLink title: @"Display Settings…" on: NO action: ^{ CCOpenSettings(@"com.apple.Displays-Settings.extension"); }] ];
 	default: return nil;
 	}

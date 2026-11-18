@@ -21,6 +21,9 @@ int  ccp_wifi_power(void);                       /* 1 on (UP), 0 off, -1 no Wi-F
 int  ccp_wifi_set(int on);
 int  ccp_bluetooth_power(void);                  /* 1 / 0, -1 no controller */
 int  ccp_bluetooth_set(int on);
+int  ccp_sound_list(char names[][64], int max, int *current);   /* /dev/sndstat: "pcmN: <description> ..."; count, *current = index of the default unit (-1 unknown) */
+int  ccp_sound_set(int index);                   /* sysctl hw.snd.default_unit = N of that entry; 1 done */
+int  ccp_wifi_scan(char names[][64], int max);   /* "ifconfig wlanN list scan": SSIDs, strongest first as printed; 0 when none or not allowed */
 #ifdef __cplusplus
 }
 #endif

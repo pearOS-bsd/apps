@@ -11,7 +11,7 @@ D=$(dirname "$0"); if [ -n "$1" ]; then echo "$1" > $D/state.bl; else cat $D/sta
 X
 cat > $d/ifconfig <<'X'
 #!/bin/sh
-D=$(dirname "$0"); case "$1" in -l) echo "vtnet0 wlan0 lo0";; wlan0) if [ -n "$2" ]; then echo $2 > $D/state.wlan; else if [ "$(cat $D/state.wlan 2>/dev/null)" = up ]; then echo "wlan0: flags=8843<UP,BROADCAST,RUNNING,SIMPLEX,MULTICAST> metric 0 mtu 1500"; else echo "wlan0: flags=8802<BROADCAST,SIMPLEX,MULTICAST> metric 0 mtu 1500"; fi; fi;; esac
+D=$(dirname "$0"); case "$1" in -l) echo "vtnet0 wlan0 lo0";; wlan0) if [ "$2" = list ]; then printf "SSID/MESH ID                      BSSID              CHAN RATE   S:N     INT CAPS\\nHome Net                          00:11:22:33:44:55    6   54M -60:-95  100 EPS\\nCafe                              aa:bb:cc:dd:ee:ff   11   54M -70:-95  100 EP\\n"; elif [ -n "$2" ]; then echo $2 > $D/state.wlan; else if [ "$(cat $D/state.wlan 2>/dev/null)" = up ]; then echo "wlan0: flags=8843<UP,BROADCAST,RUNNING,SIMPLEX,MULTICAST> metric 0 mtu 1500"; else echo "wlan0: flags=8802<BROADCAST,SIMPLEX,MULTICAST> metric 0 mtu 1500"; fi; fi;; esac
 X
 cat > $d/ngctl <<'X'
 #!/bin/sh
@@ -22,3 +22,9 @@ cat > $d/service <<'X'
 D=$(dirname "$0"); echo "$2" > $D/state.bt
 X
 chmod +x $d/*
+cat > $d/sndstat <<'X'
+Installed devices:
+pcm0: <Intel HDA Speakers> (play/rec) default
+pcm1: <USB Headset> (play/rec)
+pcm2: <HDMI Capture> (rec)
+X

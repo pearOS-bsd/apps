@@ -87,3 +87,32 @@ int ccp_bluetooth_set(int on)
 {
 	if (ccp_bluetooth_power() < 0) return 0; char a[64]; snprintf(a, sizeof a, "bluetooth %s >/dev/null 2>&1", on ? "onestart" : "onestop"); return runp("/usr/sbin/service", a, NULL, 0) == 0;
 }
+
+/* sound: /dev/sndstat lines look like "pcm0: <Intel Alder Lake-P (HDA Realtek ALC...)> (play/rec) default"; the unit number is the digits after "pcm" */
+static int sound_units[16];
+int ccp_sound_list(char names[][64], int max, int *current)
+{
+	char b[256]; const char *path = P("/dev/sndstat", b, sizeof b); FILE *f = fopen(path, "r"); if (!f) return 0; char line[512]; int n = 0; if (current) *current = -1;
+	while (fgets(line, sizeof line, f) && n < max && n < 16) {
+		if (strncmp(line, "pcm", 3) || !isdigit((unsigned char)line[3])) continue;
+		int unit = atoi(line + 3); char *lt = strchr(line, '<'), *gt = lt ? strrchr(line, '>') : NULL; if (!lt || !gt || gt < lt) continue;
+		*gt = 0; if (!strstr(gt + 1, "play")) continue;                      /* outputs only */
+		snprintf(names[n], 64, "%s", lt + 1); sound_units[n] = unit; if (current && strstr(gt + 1, "default")) *current = n; n++;
+	}
+	fclose(f); return n;
+}
+int ccp_sound_set(int index)
+{
+	char names[16][64]; int cur, n = ccp_sound_list(names, 16, &cur); if (index < 0 || index >= n) return 0; return set_int("hw.snd.default_unit", sound_units[index]);
+}
+/* Wi-Fi scan: the first column of "ifconfig wlanN list scan" is the SSID (it can contain spaces: the BSSID column starts at a fixed offset, so cut at the first MAC-looking field) */
+int ccp_wifi_scan(char names[][64], int max)
+{
+	char ifn[32], a[64], o[8192]; if (!ccp_wifi_interface(ifn, sizeof ifn)) return 0; snprintf(a, sizeof a, "%s list scan 2>/dev/null", ifn); if (runp("/sbin/ifconfig", a, o, sizeof o) != 0) return 0;
+	int n = 0; char *save = NULL; (void)strtok_r(o, "\n", &save);                      /* header */
+	for (char *l = strtok_r(NULL, "\n", &save); l && n < max; l = strtok_r(NULL, "\n", &save)) {
+		char *m = l; int cut = -1; for (; *m; m++) if (m[2] == ':' && isxdigit((unsigned char)m[0]) && isxdigit((unsigned char)m[1]) && m[5] == ':') { cut = (int)(m - l); break; }
+		if (cut <= 0) continue; int e = cut; while (e > 0 && l[e - 1] == ' ') e--; if (e <= 0) continue; if (e > 63) e = 63; memcpy(names[n], l, e); names[n][e] = 0; n++;
+	}
+	return n;
+}
