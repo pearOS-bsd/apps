@@ -123,8 +123,8 @@ static CGRect editPill(CGRect panel) { return CGRectMake(1074, CGRectGetMaxY(pan
 {
 	CGFloat ax = kPanelX + kPanelW - kWindow.origin.x, ay = kWindow.size.height - kPanelY, cx = kWindow.size.width / 2, cy = kWindow.size.height / 2;
 	CATransform3D s = CATransform3DMakeScale(0.94, 0.94, 1), from = CATransform3DConcat(CATransform3DConcat(CATransform3DMakeTranslation(-(ax - cx), -(ay - cy), 0), s), CATransform3DMakeTranslation(ax - cx, ay - cy, 0));
-	CASpringAnimation *sp = CCSwiftUISpring(@"transform", 0.5, 1.0); sp.fromValue = [NSValue valueWithCATransform3D: from]; sp.toValue = [NSValue valueWithCATransform3D: CATransform3DIdentity];
-	CASpringAnimation *fade = CCSwiftUISpring(@"opacity", 0.5, 1.0); fade.fromValue = @0; fade.toValue = @1;
+	CASpringAnimation *sp = CCRawSpring(@"transform", 1, 631.6547, 51.6603);       /* read at run time from the real ControlCenter (lldb breakpoint on Animation.interpolatingSpring while its panel opened): mass 1, stiffness 631.6547 (= (2 pi / 0.25)^2), damping 51.6603 (zeta 1.03) */ sp.fromValue = [NSValue valueWithCATransform3D: from]; sp.toValue = [NSValue valueWithCATransform3D: CATransform3DIdentity];
+	CASpringAnimation *fade = CCRawSpring(@"opacity", 1, 631.6547, 51.6603); fade.fromValue = @0; fade.toValue = @1;
 	[layer addAnimation: sp forKey: @"open-scale"]; [layer addAnimation: fade forKey: @"open-fade"]; [CATransaction flush];
 }
 /* a page replaces the panel (modal anchored to the tile: the real code uses interpolatingSpring(mass 2, stiffness 300, damping 50) in "modalAnchoredFromDisplayable", read from the binary) */

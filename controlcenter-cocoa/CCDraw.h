@@ -24,3 +24,5 @@ void CCSetBandedContentsFade(CALayer *layer, CGImageRef img, int bandHeight, BOO
 /* A Core Animation spring with the parameters of a SwiftUI `Animation.spring(response:dampingFraction:)` (stiffness (2 pi / response)^2, damping 2 zeta sqrt(stiffness), mass 1): the real ControlCenter's animations are
  * SwiftUI springs, the constants were read from its code (docs/development/CONTROLCENTER-ANIMATIONS.md). */
 CASpringAnimation *CCSwiftUISpring(NSString *keyPath, double response, double dampingFraction);
+
+CASpringAnimation *CCRawSpring(NSString *keyPath, double mass, double stiffness, double damping);     /* the parameters of SwiftUI's interpolatingSpring as they are */

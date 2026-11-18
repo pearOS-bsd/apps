@@ -144,3 +144,8 @@ CASpringAnimation *CCSwiftUISpring(NSString *keyPath, double response, double ze
 	CASpringAnimation *a = [CASpringAnimation animationWithKeyPath: keyPath]; double k = pow(2 * M_PI / response, 2);
 	a.mass = 1; a.stiffness = k; a.damping = 2 * zeta * sqrt(k); a.initialVelocity = 0; a.duration = a.settlingDuration; return a;
 }
+
+CASpringAnimation *CCRawSpring(NSString *keyPath, double mass, double stiffness, double damping)
+{
+	CASpringAnimation *a = [CASpringAnimation animationWithKeyPath: keyPath]; a.mass = mass; a.stiffness = stiffness; a.damping = damping; a.initialVelocity = 0; a.duration = a.settlingDuration; return a;
+}
