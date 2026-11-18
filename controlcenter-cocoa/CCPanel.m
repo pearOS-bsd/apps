@@ -13,9 +13,10 @@ static const CGFloat kPanelX = 966, kPanelY = 34, kPanelW = 308;
 
 static CGRect editPill(CGRect panel) { return CGRectMake(1074, CGRectGetMaxY(panel) - 31, 93, 23); }          /* "Edit Controls": 502..525 in a panel ending at 533 */
 
+static void ccTrace(const char *s) { if (!getenv("CC_TRACE")) return; write(2, "cc-trace: ", 10); write(2, s, strlen(s)); write(2, "\n", 1); }
 @implementation CCPanel
 {
-	DockWindow *win; CALayer *layer, *baseLayer, *tileLayer; NSMutableArray<CALayer *> *tiles; NSMutableArray<CCControl *> *tileOwners; CCControl *hovered; BOOL editing; CCGallery *gallery;
+	DockWindow *win; CALayer *layer, *baseLayer, *tileLayer; NSMutableArray<CALayer *> *tiles; NSMutableArray<CCControl *> *tileOwners; CCControl *hovered; NSUInteger tileGeneration; BOOL editing; CCGallery *gallery;
 	CCKind pageKind; BOOL hasPage; CGFloat pageX; NSArray<CCRow *> *pageRows; CCControl *pressed; CGPoint pressPoint; BOOL moved; CCControl *dragSlider; NSTimer *poll;
 }
 - (BOOL)visible { return win != nil; }
@@ -111,32 +112,43 @@ static CGRect editPill(CGRect panel) { return CGRectMake(1074, CGRectGetMaxY(pan
 }
 static const CGFloat kTilePad = 4;
 - (CGRect)tileFrame:(CCControl *)ct { CGRect f = CGRectInset([ct frame], -kTilePad, -kTilePad); return CGRectMake(f.origin.x - kWindow.origin.x, kWindow.size.height - (f.origin.y - kWindow.origin.y) - f.size.height, f.size.width, f.size.height); }
-- (CGImageRef)newTileImage:(CCControl *)ct
+- (CGImageRef)newTileImage:(CCControl *)ct dark:(BOOL)dark
 {
-	BOOL dark = CCDarkTheme(); CGRect f = CGRectInset([ct frame], -kTilePad, -kTilePad);
+	CGRect f = CGRectInset([ct frame], -kTilePad, -kTilePad);
 	CGContextRef c = CCBeginBitmap(f.size, f.origin); [self drawControl: ct in: c dark: dark];
 	if (editing) { CGRect r = [ct frame]; CGPoint b = CGPointMake(r.origin.x + 8, r.origin.y + 8); CCFillDisc(c, b, 19, dark ? 66 : 120); CCFillGrey(c, 255, 1); CGContextSetLineWidth(c, 1.4); CCGlyph(c, @"minus", b, 14); }
 	return CCEndBitmap(c);
 }
-- (void)syncTiles:(BOOL)fade
+/* The tiles are drawn one per run-loop turn after the panel is shown (a slow or blocking control does not hold the whole panel back); a newer redraw cancels the older one */
+- (void)fillTile:(NSUInteger)i generation:(NSUInteger)gen fade:(BOOL)fade dark:(BOOL)dark
 {
-	NSArray<CCControl *> *cs = [CCLayout shared].controls; BOOL same = cs.count == tileOwners.count;
+	if (!win || gen != tileGeneration || i >= tileOwners.count) return;
+	CCControl *ct = tileOwners[i]; CALayer *l = tiles[i]; CGImageRef img = [self newTileImage: ct dark: dark];
+	[CATransaction begin]; [CATransaction setDisableActions: YES];
+	l.frame = [self tileFrame: ct];
+	if (fade && l.contents) { CATransition *t = [CATransition animation]; t.type = kCATransitionFade; t.duration = 0.15; t.timingFunction = [CAMediaTimingFunction functionWithName: kCAMediaTimingFunctionEaseInEaseOut]; [l addAnimation: t forKey: @"contents-fade"]; }
+	l.contents = (__bridge id)img; CGImageRelease(img); [CATransaction commit]; [CATransaction flush];
+	__weak CCPanel *w = self; dispatch_async(dispatch_get_main_queue(), ^{ [w fillTile: i + 1 generation: gen fade: fade dark: dark]; });
+}
+- (void)syncTiles:(BOOL)fade dark:(BOOL)dark
+{
+	NSArray<CCControl *> *cs = [CCLayout shared].controls; if (getenv("CC_TILELIMIT")) cs = [cs subarrayWithRange: NSMakeRange(0, MIN(cs.count, (NSUInteger)atoi(getenv("CC_TILELIMIT"))))];
+	BOOL same = cs.count == tileOwners.count;
 	for (NSUInteger i = 0; same && i < cs.count; i++) if (tileOwners[i] != cs[i]) same = NO;
 	[CATransaction begin]; [CATransaction setDisableActions: YES];
-	if (!same) { for (CALayer *l in tiles) [l removeFromSuperlayer]; tiles = [NSMutableArray array]; tileOwners = [NSMutableArray array]; hovered = nil; }
-	for (NSUInteger i = 0; i < cs.count; i++) {
-		CCControl *ct = cs[i]; CALayer *l; if (same) l = tiles[i]; else { l = [CALayer layer]; l.contentsGravity = kCAGravityResize; [tileLayer addSublayer: l]; [tiles addObject: l]; [tileOwners addObject: ct]; }
-		l.frame = [self tileFrame: ct]; CGImageRef img = [self newTileImage: ct];
-		if (fade && same) { CATransition *t = [CATransition animation]; t.type = kCATransitionFade; t.duration = 0.15; t.timingFunction = [CAMediaTimingFunction functionWithName: kCAMediaTimingFunctionEaseInEaseOut]; [l addAnimation: t forKey: @"contents-fade"]; }
-		l.contents = (__bridge id)img; CGImageRelease(img);
+	if (!same) {
+		for (CALayer *l in tiles) [l removeFromSuperlayer]; tiles = [NSMutableArray array]; tileOwners = [NSMutableArray array]; hovered = nil;
+		for (CCControl *ct in cs) { CALayer *l = [CALayer layer]; l.contentsGravity = kCAGravityResize; l.frame = [self tileFrame: ct]; [tileLayer addSublayer: l]; [tiles addObject: l]; [tileOwners addObject: ct]; }
 	}
 	[CATransaction commit];
+	tileGeneration++; NSUInteger gen = tileGeneration; __weak CCPanel *w = self;
+	dispatch_async(dispatch_get_main_queue(), ^{ [w fillTile: 0 generation: gen fade: fade && same dark: dark]; });
 }
 - (void)applyFading:(BOOL)fade
 {
 	if (!win) return;
 	CGImageRef img = [self newImage]; CCSetBandedContentsFade(baseLayer, img, 32, fade); CGImageRelease(img);
-	tileLayer.hidden = hasPage; if (!hasPage) [self syncTiles: fade];
+	tileLayer.hidden = hasPage; if (!hasPage && !getenv("CC_NOTILES")) [self syncTiles: fade dark: CCDarkTheme()];
 	[CATransaction flush]; [gallery redraw];
 }
 /* a tile's scale on a spring from where it is now: the real ControlCenter's pointer feedback is spring(0.2, 1.0) and spring(0.25, 0.75) (80 and 50 calls while the pointer moved over the open panel; which is the press and which the hover is a GUESS) */
@@ -179,15 +191,15 @@ static const CGFloat kTilePad = 4;
 - (void)show
 {
 	const SkyLightAPI *sl = SkyLightLoad(); const CCSkyLight *cc = CCSkyLightLoad(); if (!sl) return;
-	win = [[DockWindow alloc] initWithFrame: kWindow level: 22 options: 0x10000];
+	ccTrace("show: begin"); win = [[DockWindow alloc] initWithFrame: kWindow level: 22 options: 0x10000]; ccTrace(win ? "show: window" : "show: NO window");
 	if (!win) { NSLog(@"cc: panel window not created"); return; }
 	layer = [CALayer layer]; layer.frame = CGRectMake(0, 0, kWindow.size.width, kWindow.size.height);
 	baseLayer = [CALayer layer]; baseLayer.frame = layer.bounds; tileLayer = [CALayer layer]; tileLayer.frame = layer.bounds; [layer addSublayer: baseLayer]; [layer addSublayer: tileLayer]; tiles = nil; tileOwners = nil; hovered = nil;
-	[self applyFading: NO];
-	[win setRootLayer: layer];
+	ccTrace("show: layers"); [self applyFading: NO]; ccTrace("show: applied");
+	[win setRootLayer: layer]; ccTrace("show: root");
 	if (cc->SetWindowClientPerceivedType) cc->SetWindowClientPerceivedType(sl->MainConnectionID(), win.windowID, 5);
-	CCShowWindow(win, 22);
-	[self animateOpen];
+	CCShowWindow(win, 22); ccTrace("show: shown");
+	[self animateOpen]; ccTrace("show: opened");
 	__weak CCPanel *w = self; poll = [NSTimer scheduledTimerWithTimeInterval: 1 repeats: YES block: ^(NSTimer *t) { (void)t; [w redraw]; }];       /* states change outside (appearance, preferences) */
 }
 - (void)hide

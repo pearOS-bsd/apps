@@ -89,7 +89,8 @@ CGRect CCCellRect(int col, int row, int w, int h) { return CGRectMake(round(kX0 
 /* ---- actions ---- */
 static void spawn(const char *path, const char *a1, const char *a2, const char *a3) { const char *argv[] = { path, a1, a2, a3, NULL }; pid_t pid; posix_spawn(&pid, path, NULL, NULL, (char *const *)argv, *_NSGetEnviron()); }
 static void openApp(const char *name) { spawn("/usr/bin/open", "-a", name, NULL); }
-static void *lib(const char *p) { return dlopen(p, RTLD_LAZY); }
+/* CC_NO_SYSTEM_SERVICES=1 (pearOS: the daemons behind CoreWLAN, IOBluetooth, MediaRemote ... do not exist yet, and a call into them never returns while holding dyld's lock): the system frameworks are not loaded and the FreeBSD bindings of CCPlatform answer */
+static void *lib(const char *p) { if (getenv("CC_NO_SYSTEM_SERVICES")) return NULL; return dlopen(p, RTLD_LAZY); }
 static BOOL prefBool(CFStringRef key, CFStringRef app) { CFPropertyListRef v = CFPreferencesCopyAppValue(key, app); BOOL b = v && CFGetTypeID(v) == CFBooleanGetTypeID() && CFBooleanGetValue(v); if (v) CFRelease(v); return b; }
 static void setPrefBool(CFStringRef key, CFStringRef app, BOOL b) { CFPreferencesSetAppValue(key, b ? kCFBooleanTrue : kCFBooleanFalse, app); CFPreferencesAppSynchronize(app); }
 
@@ -166,7 +167,7 @@ void CCNowPlayingStart(void)
 	}];
 }
 /* brightness: DisplayServices; volume: CoreAudio default output device */
-double CCSliderGet(CCKind k)
+static double sliderGetSlow(CCKind k)
 {
 	if (k == CCDisplay) { void *h = lib("/System/Library/PrivateFrameworks/DisplayServices.framework/DisplayServices"); int (*f)(uint32_t, float *) = h ? dlsym(h, "DisplayServicesGetBrightness") : NULL; float v = 0; if (f && f(CGMainDisplayID(), &v) == 0) return v; }
 	{ double v = k == CCDisplay ? ccp_brightness_get() : k == CCKeyboardBrightness ? ccp_kbd_get() : ccp_volume_get(); if (v >= 0) return v; }       /* FreeBSD: backlight(8) / ACPI, clevo_dchu, mixer(8) */
@@ -178,7 +179,7 @@ void CCSliderSet(CCKind k, double v)
 	if (k == CCDisplay) ccp_brightness_set(v); else if (k == CCKeyboardBrightness) ccp_kbd_set(v); else ccp_volume_set(v);
 	[[NSUserDefaults standardUserDefaults] setObject: @(v) forKey: k == CCDisplay ? @"pearos.cc.display" : @"pearos.cc.sound"];          /* TODO(feature): CoreAudio kAudioHardwareServiceDeviceProperty_VirtualMainVolume */
 }
-NSString *CCStateText(CCKind k)
+static NSString *stateTextSlow(CCKind k)
 {
 	switch (k) {
 	case CCWifi: { id i = wifiInterface(); if (!i) return ccp_wifi_power() > 0 ? @"On" : @"Off"; return ((BOOL (*)(id, SEL))objc_msgSend)(i, sel_registerName("powerOn")) ? @"On" : @"Off"; }
@@ -194,7 +195,7 @@ BOOL CCIsOn(CCKind k)
 	case CCDarkMode: return CCDarkTheme();
 	case CCStageManager: return prefBool(CFSTR("GloballyEnabled"), CFSTR("com.apple.WindowManager"));
 	case CCWifi: case CCBluetooth: case CCAirDrop: return [CCStateText(k) isEqual: @"On"] || ([CCStateText(k) length] && ![CCStateText(k) isEqual: @"Off"]);
-	case CCFocus: return CCFocusActiveMode() != nil;
+	case CCFocus: return [CCStateText(k) length] > 0;
 	default: return NO;
 	}
 }
@@ -299,3 +300,15 @@ NSArray<CCRow *> *CCPageRows(CCKind k)
 	default: return nil;
 	}
 }
+
+/* The state of a control is asked of a system service (CoreWLAN, IOBluetooth, CoreAudio, DisplayServices ...) that may be slow or not there at all (pearOS has none of them yet: the call then never returns): the panel is drawn from the last answer and the question is asked on a background queue, one at a time per control, so a missing service can never hold the panel back. */
+static NSMutableDictionary *sCache; static NSMutableSet *sBusy; static dispatch_queue_t sQ; static NSLock *sLock;
+static id cached(NSString *key, id (^ask)(void))
+{
+	static dispatch_once_t once; dispatch_once(&once, ^{ sCache = [NSMutableDictionary dictionary]; sBusy = [NSMutableSet set]; sLock = [NSLock new]; sQ = dispatch_queue_create("cc.state", DISPATCH_QUEUE_CONCURRENT); });
+	[sLock lock]; id v = sCache[key]; BOOL busy = [sBusy containsObject: key]; if (!busy) [sBusy addObject: key]; [sLock unlock];
+	if (!busy) dispatch_async(sQ, ^{ id r = ask(); [sLock lock]; if (r) sCache[key] = r; else [sCache removeObjectForKey: key]; [sBusy removeObject: key]; [sLock unlock]; });
+	return v;
+}
+NSString *CCStateText(CCKind k) { return cached([NSString stringWithFormat: @"s%d", (int)k], ^id{ return stateTextSlow(k); }); }
+double CCSliderGet(CCKind k) { NSNumber *n = cached([NSString stringWithFormat: @"v%d", (int)k], ^id{ return @(sliderGetSlow(k)); }); return n ? n.doubleValue : 0; }
