@@ -14,3 +14,7 @@ typedef struct {
 	CGError (*SetWindowClientPerceivedType)(int cid, uint32_t wid, int type);
 } CCSkyLight;
 const CCSkyLight *CCSkyLightLoad(void);
+
+/* Orders a window in the way the real ControlCenter does it for its windows (dtrace): window tags (two calls), level and order in ONE transaction.  DockWindow's own orderIn left the panel at level 0 on pearOS. */
+@class DockWindow;
+void CCShowWindow(DockWindow *w, int level);

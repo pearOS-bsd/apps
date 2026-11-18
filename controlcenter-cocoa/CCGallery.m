@@ -25,7 +25,7 @@ typedef struct { CGRect r; int idx; } Hit;
 	CGImageRef img = [self newImage]; CCSetBandedContents(layer, img, 32); CGImageRelease(img);
 	[win setRootLayer: layer];
 	if (cc->SetWindowClientPerceivedType) cc->SetWindowClientPerceivedType(sl->MainConnectionID(), win.windowID, 5);
-	[win orderIn];
+	CCShowWindow(win, 23);
 	return self;
 }
 - (void)close { if (!win) return; const SkyLightAPI *sl = SkyLightLoad(); if (sl && sl->ReleaseWindow) sl->ReleaseWindow(sl->MainConnectionID(), win.windowID); win = nil; layer = nil; }

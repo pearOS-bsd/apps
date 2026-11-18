@@ -124,7 +124,7 @@ static CGRect editPill(CGRect panel) { return CGRectMake(1074, CGRectGetMaxY(pan
 	CGImageRef img = [self newImage]; CCSetBandedContents(layer, img, 32); CGImageRelease(img);
 	[win setRootLayer: layer];
 	if (cc->SetWindowClientPerceivedType) cc->SetWindowClientPerceivedType(sl->MainConnectionID(), win.windowID, 5);
-	[win orderIn];
+	CCShowWindow(win, 22);
 	__weak CCPanel *w = self; poll = [NSTimer scheduledTimerWithTimeInterval: 1 repeats: YES block: ^(NSTimer *t) { (void)t; [w redraw]; }];       /* states change outside (appearance, preferences) */
 }
 - (void)hide
