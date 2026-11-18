@@ -119,7 +119,7 @@ static CGRect editPill(CGRect panel) { return CGRectMake(1074, CGRectGetMaxY(pan
 {
 	const SkyLightAPI *sl = SkyLightLoad(); const CCSkyLight *cc = CCSkyLightLoad(); if (!sl) return;
 	win = [[DockWindow alloc] initWithFrame: kWindow level: 22 options: 0x10000];
-	if (!win) return;
+	if (!win) { NSLog(@"cc: panel window not created"); return; }
 	layer = [CALayer layer]; layer.frame = CGRectMake(0, 0, kWindow.size.width, kWindow.size.height);
 	CGImageRef img = [self newImage]; layer.contents = (__bridge id)img; CGImageRelease(img);
 	[win setRootLayer: layer];
