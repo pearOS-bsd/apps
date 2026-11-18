@@ -8,4 +8,5 @@
 - (instancetype)initWithController:(DockController *)controller;
 - (void)modelChanged;                                  /* the controller rebuilt the layers: forget the label */
 - (void)hideLabel;
+- (void)relayoutLabel;                                  /* magnification moved the tiles: put the label where the tile is now */
 @end

@@ -13,13 +13,22 @@
 @property (copy) NSDictionary *dict;                /* the tile as it is in the preferences (nil for Finder, running apps not kept, separators, Trash) */
 @property int section;                               /* 0 applications | 1 running / recent | 2 folders and Trash */
 @property (weak) CALayer *iconLayer;                 /* the layer that shows the icon (set by DockView) */
+@property (weak) CALayer *badgeLayer, *dotLayer, *sepLayer;     /* the other layers of the tile (set by DockView): magnification moves them */
+@property CGRect baseFrame;                          /* the slot at rest (frame follows the magnified slot while the pointer is over the Dock) */
+@property CGRect baseIcon;                           /* the icon layer at rest (set by DockView) */
 @property int kind;                                  /* DOCK_APP, DOCK_SEPARATOR, DOCK_OTHER, DOCK_TRASH (dock_layout.h) */
 @end
 @interface DockModel : NSObject
 @property (readonly) NSArray<DockTile *> *tiles;
 @property (readonly) int orientation;                /* 0 bottom, 1 left, 2 right (preference `orientation`) */
 @property (readonly) int tileSize;                    /* after shrinking to fit the display */
-@property (readonly) CGRect barRect;                 /* in window coordinates, origin top-left, window = the display */
+@property (readwrite) CGRect barRect;                /* in window coordinates, origin top-left, window = the display; magnification changes it while the pointer is over the Dock */
+@property (readonly) CGRect baseBarRect;             /* at rest */
+@property (readonly) BOOL magnification;            /* preference `magnification` */
+@property (readonly) CGFloat largeSize;              /* preference `largesize` (default 128) */
+@property CGFloat magExtra;                          /* how far the magnified icons stick out of the bar now (0 at rest) */
+- (CGRect)hitRect;                                   /* the bar plus what the magnified icons cover: where a tile can be hit */
+@property (weak) CALayer *barLayer;                  /* the bar's layer (set by DockView) */
 + (NSDictionary *)tileDictionaryForPath:(NSString *)path label:(NSString *)label bundleIdentifier:(NSString *)bid;     /* a new file-tile in the shape of the real Dock's (docs/development/DOCK-CONFIG.md) */
 - (instancetype)initWithPrefs:(DockPrefs *)prefs displayBounds:(CGRect)display;
 @end

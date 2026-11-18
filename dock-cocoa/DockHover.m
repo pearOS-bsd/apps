@@ -17,7 +17,7 @@
 - (void)hideLabel { [CATransaction begin]; [CATransaction setDisableActions: YES]; [label removeFromSuperlayer]; label = nil; shown = -2; [CATransaction commit]; [CATransaction flush]; }
 - (NSInteger)tileAt:(CGPoint)p
 {
-	DockModel *model = self.model; CGRect bar = model.barRect; if (!CGRectContainsPoint(CGRectInset(bar, 0, -2), p)) return -1;
+	DockModel *model = self.model; CGRect bar = model.hitRect; if (!CGRectContainsPoint(CGRectInset(bar, 0, -2), p)) return -1;
 	for (NSUInteger i = 0; i < model.tiles.count; i++) { DockTile *t = model.tiles[i]; if (t.kind != DOCK_SEPARATOR && DockAxis(model, p) >= DockTileMin(model, t) && DockAxis(model, p) < DockTileMax(model, t)) return (NSInteger)i; }
 	return -1;
 }
@@ -52,6 +52,14 @@
 	tl.frame = CGRectMake(ori == 1 ? ptrH : 0, round((h - (asc + desc)) / 2) - 1, w, asc + desc + 2); [box addSublayer: tl];
 	CFRelease(font);
 	return box;
+}
+- (void)relayoutLabel
+{
+	if (!label || shown < 0 || shown >= (NSInteger)self.model.tiles.count) return; DockTile *t = self.model.tiles[shown]; CGRect bar = self.model.baseBarRect; int ori = self.model.orientation;
+	[CATransaction begin]; [CATransaction setDisableActions: YES]; CGRect f = label.frame;
+	if (ori == 0) { f.origin.x = round(CGRectGetMidX(t.frame) - f.size.width / 2); f.origin.y = CGRectGetMinY(bar) - 40 - (t.iconLayer ? t.baseIcon.origin.y - t.iconLayer.frame.origin.y : 0); }
+	else { f.origin.y = round(CGRectGetMidY(t.frame) - f.size.height / 2); }
+	label.frame = f; [CATransaction commit];
 }
 - (void)tick
 {

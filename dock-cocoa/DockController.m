@@ -2,13 +2,14 @@
 #import "DockView.h"
 #import "DockWallpaper.h"
 #import "DockHover.h"
+#import "DockMagnify.h"
 #import "DockInput.h"
 #import "DockServer.h"
 #import "DockNotify.h"
 #import "SkyLightAPI.h"
 #import "../dock/dock_layout.h"
 @implementation DockController
-{ DockWindow *win, *wall; DockHover *hover; DockInput *input; NSTimer *refresh; NSString *signature; }
+{ DockWindow *win, *wall; DockMagnify *magnify; DockHover *hover; DockInput *input; NSTimer *refresh; NSString *signature; }
 - (NSString *)runtimeSignature { NSMutableString *s = [NSMutableString string]; [s appendFormat: @"%@|%@|", _prefs.values[@"orientation"], _prefs.values[@"tilesize"]]; for (DockTile *t in _model.tiles) [s appendFormat: @"%@|%d|%@;", t.path, t.running, t.badge]; return s; }
 - (id)hoverObject { return hover; }
 - (void)start
@@ -27,7 +28,7 @@
 		const SkyLightAPI *sl = SkyLightLoad(); int cid = sl ? sl->MainConnectionID() : 0; CFTypeRef tx = sl && sl->TransactionCreate ? sl->TransactionCreate(cid) : NULL;
 		if (tx) { sl->TransactionOrderWindow(tx, wid, 0 /* out */, 0); CGError e = sl->TransactionCommit(tx, 1); CFRelease(tx); NSLog(@"dock: minimize request window %u \"%@\" animate %d -> order out: error %d", wid, title, animate, e); }
 	});
-	hover = [[DockHover alloc] initWithController: self];
+	hover = [[DockHover alloc] initWithController: self]; magnify = [[DockMagnify alloc] initWithController: self];
 	input = [[DockInput alloc] initWithController: self];
 	/* running applications and badges change while the Dock runs: look again every 1.5 s (SCAFFOLDING: the real Dock is told by LaunchServices / usernoted) */
 	signature = [self runtimeSignature];
@@ -44,7 +45,7 @@
 	_prefs = [[DockPrefs alloc] initFromPreferences];
 	_model = [[DockModel alloc] initWithPrefs: _prefs displayBounds: _display];
 	_root = DockBuildLayers(_model, _display.size); [win setRootLayer: _root];
-	[hover modelChanged];
+	[hover modelChanged]; [magnify modelChanged];
 }
 - (void)setPreference:(id)value forKey:(NSString *)key { [DockPrefs setValue: value forKey: key]; [self reload]; }
 - (NSArray<NSDictionary *> *)persistentApps

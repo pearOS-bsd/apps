@@ -31,11 +31,11 @@ static CGEventRef onEvent(CGEventTapProxy proxy, CGEventType type, CGEventRef ev
 }
 - (DockTile *)tileAt:(CGPoint)p
 {
-	DockModel *m = ctl.model; if (!CGRectContainsPoint(CGRectInset(m.barRect, 0, -2), p)) return nil;
+	DockModel *m = ctl.model; if (!CGRectContainsPoint(CGRectInset(m.hitRect, 0, -2), p)) return nil;
 	for (DockTile *t in m.tiles) if (DockAxis(m, p) >= DockTileMin(m, t) && DockAxis(m, p) < DockTileMax(m, t)) return t;
 	return nil;
 }
-- (BOOL)inBar:(CGPoint)p { return CGRectContainsPoint(CGRectInset(ctl.model.barRect, 0, -2), p); }
+- (BOOL)inBar:(CGPoint)p { return CGRectContainsPoint(CGRectInset(ctl.model.hitRect, 0, -2), p); }
 - (BOOL)busy { return menu != nil || st != StIdle; }
 - (void)closeMenu { [menu close]; menu = nil; menuTile = nil; }
 - (BOOL)draggable:(DockTile *)t { return t.dict != nil && (t.section == 0 || t.section == 2) && t.kind != DOCK_TRASH && t.kind != DOCK_SEPARATOR; }

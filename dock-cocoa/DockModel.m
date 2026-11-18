@@ -22,6 +22,12 @@ static DockTile *TileFromDict(NSDictionary *d, int kind)
 	return @{ @"GUID": @(arc4random()), @"tile-type": @"file-tile", @"tile-data": td };
 }
 - (NSArray<DockTile *> *)tiles { return list; }
+- (CGRect)hitRect
+{
+	CGRect r = _barRect; CGFloat e = _magExtra; if (e <= 0) return r;
+	if (_orientation == 0) { r.origin.y -= e; r.size.height += e; } else if (_orientation == 1) r.size.width += e; else { r.origin.x -= e; r.size.width += e; }
+	return r;
+}
 - (instancetype)initWithPrefs:(DockPrefs *)prefs displayBounds:(CGRect)display
 {
 	if (!(self = [super init])) return nil;
@@ -69,6 +75,8 @@ static DockTile *TileFromDict(NSDictionary *d, int kind)
 		for (NSUInteger i = 0; i < n; i++) { list[i].frame = CGRectMake(x, display.origin.y + menubar + slots[i].x, thick, slots[i].w); list[i].art = slots[i].art; }
 	}
 	free(items); free(slots);
+	_baseBarRect = _barRect; for (DockTile *t in list) t.baseFrame = t.frame;
+	_magnification = [prefs.values[@"magnification"] boolValue]; _largeSize = [prefs.values[@"largesize"] doubleValue] > 0 ? [prefs.values[@"largesize"] doubleValue] : 128;
 	return self;
 }
 @end
