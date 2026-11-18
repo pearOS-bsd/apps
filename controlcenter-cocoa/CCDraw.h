@@ -19,3 +19,4 @@ void CCGlyph(CGContextRef c, NSString *name, CGPoint ctr, CGFloat size);
  * (its commit never arrived: images of this size are handled differently by CoreAnimation); bands of ~80 KB travel like the small images of the status items.  Harmless on a Mac. */
 #import <QuartzCore/QuartzCore.h>
 void CCSetBandedContents(CALayer *layer, CGImageRef img, int bandHeight);
+void CCSetBandedContentsFade(CALayer *layer, CGImageRef img, int bandHeight, BOOL fade);     /* fade: a cross-fade of the bands (0.15 s) for a change the user made */

@@ -123,7 +123,8 @@ void CCGlyph(CGContextRef c, NSString *n, CGPoint o, CGFloat size)
 	CGContextRestoreGState(c);
 }
 
-void CCSetBandedContents(CALayer *layer, CGImageRef img, int bh)
+void CCSetBandedContents(CALayer *layer, CGImageRef img, int bh) { CCSetBandedContentsFade(layer, img, bh, NO); }
+void CCSetBandedContentsFade(CALayer *layer, CGImageRef img, int bh, BOOL fade)
 {
 	size_t w = CGImageGetWidth(img), h = CGImageGetHeight(img); NSUInteger n = (h + bh - 1) / bh;
 	NSArray *old = [layer.sublayers copy]; BOOL reuse = old.count == n;
@@ -133,6 +134,7 @@ void CCSetBandedContents(CALayer *layer, CGImageRef img, int bh)
 		size_t y0 = i * bh, rows = MIN((size_t)bh, h - y0); CGImageRef band = CGImageCreateWithImageInRect(img, CGRectMake(0, y0, w, rows)); if (!band) continue;
 		CALayer *l = reuse ? old[i] : [CALayer layer];
 		if (!reuse) { l.frame = CGRectMake(0, h - y0 - rows, w, rows); l.contentsGravity = kCAGravityResize; [layer addSublayer: l]; }
+		if (fade && reuse) { CATransition *t = [CATransition animation]; t.type = kCATransitionFade; t.duration = 0.15; t.timingFunction = [CAMediaTimingFunction functionWithName: kCAMediaTimingFunctionEaseInEaseOut]; [l addAnimation: t forKey: @"contents-fade"]; }
 		l.contents = (__bridge id)band; CGImageRelease(band);
 	}
 }

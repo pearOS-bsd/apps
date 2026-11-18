@@ -112,9 +112,19 @@ static CGRect editPill(CGRect panel) { return CGRectMake(1074, CGRectGetMaxY(pan
 	}
 	return CCEndBitmap(c);
 }
+- (void)redrawFading { if (!win) return; CGImageRef img = [self newImage]; CCSetBandedContentsFade(layer, img, 32, YES); CGImageRelease(img); [CATransaction flush]; [gallery redraw]; }
 - (void)redraw { if (!win) return; CGImageRef img = [self newImage]; CCSetBandedContents(layer, img, 32); CGImageRelease(img); [CATransaction flush]; [gallery redraw]; }
 
 /* ---- window ---- */
+/* APPROXIMATE (not measured: the real panel is SwiftUI / RenderBox, its animations are not in the CoreAnimation stream and the VM has no GPU): the panel fades in over 0.2 s and settles from 94 % with a spring, about its top-right corner (the side of the status item) */
+- (void)animateOpen
+{
+	CGFloat ax = kPanelX + kPanelW - kWindow.origin.x, ay = kWindow.size.height - kPanelY, cx = kWindow.size.width / 2, cy = kWindow.size.height / 2;
+	CATransform3D s = CATransform3DMakeScale(0.94, 0.94, 1), from = CATransform3DConcat(CATransform3DConcat(CATransform3DMakeTranslation(-(ax - cx), -(ay - cy), 0), s), CATransform3DMakeTranslation(ax - cx, ay - cy, 0));
+	CASpringAnimation *sp = [CASpringAnimation animationWithKeyPath: @"transform"]; sp.fromValue = [NSValue valueWithCATransform3D: from]; sp.toValue = [NSValue valueWithCATransform3D: CATransform3DIdentity]; sp.mass = 1; sp.stiffness = 300; sp.damping = 24; sp.duration = sp.settlingDuration;
+	CABasicAnimation *fade = [CABasicAnimation animationWithKeyPath: @"opacity"]; fade.fromValue = @0; fade.toValue = @1; fade.duration = 0.2; fade.timingFunction = [CAMediaTimingFunction functionWithName: kCAMediaTimingFunctionEaseOut];
+	[layer addAnimation: sp forKey: @"open-scale"]; [layer addAnimation: fade forKey: @"open-fade"]; [CATransaction flush];
+}
 - (void)show
 {
 	const SkyLightAPI *sl = SkyLightLoad(); const CCSkyLight *cc = CCSkyLightLoad(); if (!sl) return;
@@ -125,6 +135,7 @@ static CGRect editPill(CGRect panel) { return CGRectMake(1074, CGRectGetMaxY(pan
 	[win setRootLayer: layer];
 	if (cc->SetWindowClientPerceivedType) cc->SetWindowClientPerceivedType(sl->MainConnectionID(), win.windowID, 5);
 	CCShowWindow(win, 22);
+	[self animateOpen];
 	__weak CCPanel *w = self; poll = [NSTimer scheduledTimerWithTimeInterval: 1 repeats: YES block: ^(NSTimer *t) { (void)t; [w redraw]; }];       /* states change outside (appearance, preferences) */
 }
 - (void)hide
@@ -132,7 +143,9 @@ static CGRect editPill(CGRect panel) { return CGRectMake(1074, CGRectGetMaxY(pan
 	if (!win) return;
 	hasPage = NO; pageRows = nil; pageX = 0;
 	[self setEditing: NO]; [poll invalidate]; poll = nil;
-	const SkyLightAPI *sl = SkyLightLoad(); if (sl && sl->ReleaseWindow) sl->ReleaseWindow(sl->MainConnectionID(), win.windowID); win = nil; layer = nil;
+	DockWindow *dying = win; CALayer *dl = layer; win = nil; layer = nil;
+	CABasicAnimation *fade = [CABasicAnimation animationWithKeyPath: @"opacity"]; fade.fromValue = @1; fade.toValue = @0; fade.duration = 0.12; fade.fillMode = kCAFillModeForwards; fade.removedOnCompletion = NO; [dl addAnimation: fade forKey: @"close-fade"]; [CATransaction flush];       /* 0.12 s fade out (approximate), then the window goes */
+	dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(0.14 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{ const SkyLightAPI *sl = SkyLightLoad(); if (sl && sl->ReleaseWindow) sl->ReleaseWindow(sl->MainConnectionID(), dying.windowID); });
 }
 - (void)toggleExtra:(CCKind)k atX:(CGFloat)itemMidX                  /* a click on a menu-bar extra: the page of the control under it */
 {
@@ -147,7 +160,7 @@ static CGRect editPill(CGRect panel) { return CGRectMake(1074, CGRectGetMaxY(pan
 	if (on == editing) return;
 	editing = on;
 	if (on) gallery = [[CCGallery alloc] initWithPanel: self]; else { [gallery close]; gallery = nil; }
-	[self redraw]; [[NSNotificationCenter defaultCenter] postNotificationName: CCEditModeChanged object: self userInfo: @{ @"editing": @(on) }];
+	[self redrawFading]; [[NSNotificationCenter defaultCenter] postNotificationName: CCEditModeChanged object: self userInfo: @{ @"editing": @(on) }];
 }
 - (void)scrollGallery:(double)dy { [gallery scrollBy: dy]; }
 - (void)typeInGallery:(NSString *)s { [gallery typeText: s]; }
@@ -199,8 +212,8 @@ static CGRect editPill(CGRect panel) { return CGRectMake(1074, CGRectGetMaxY(pan
 		}
 		return YES;
 	}
-	if (!moved && CCPageRows(ct.kind) && ((ct.kind == CCDisplay || ct.kind == CCSound) ? pressPoint.y < [ct frame].origin.y + 28 : ([ct entry]->w == 2 && pressPoint.x > [ct frame].origin.x + 52))) { pageKind = ct.kind; pageX = 0; pageRows = CCPageRows(pageKind); hasPage = YES; [self redraw]; return YES; }
-	if (!moved) { CCPerform(ct.kind); [self performSelector: @selector(redraw) withObject: nil afterDelay: 0.25]; }
+	if (!moved && CCPageRows(ct.kind) && ((ct.kind == CCDisplay || ct.kind == CCSound) ? pressPoint.y < [ct frame].origin.y + 28 : ([ct entry]->w == 2 && pressPoint.x > [ct frame].origin.x + 52))) { pageKind = ct.kind; pageX = 0; pageRows = CCPageRows(pageKind); hasPage = YES; [self redrawFading]; return YES; }
+	if (!moved) { CCPerform(ct.kind); [self performSelector: @selector(redrawFading) withObject: nil afterDelay: 0.25]; }
 	return YES;
 }
 @end
