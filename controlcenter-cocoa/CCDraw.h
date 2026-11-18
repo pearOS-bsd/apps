@@ -20,3 +20,7 @@ void CCGlyph(CGContextRef c, NSString *name, CGPoint ctr, CGFloat size);
 #import <QuartzCore/QuartzCore.h>
 void CCSetBandedContents(CALayer *layer, CGImageRef img, int bandHeight);
 void CCSetBandedContentsFade(CALayer *layer, CGImageRef img, int bandHeight, BOOL fade);     /* fade: a cross-fade of the bands (0.15 s) for a change the user made */
+
+/* A Core Animation spring with the parameters of a SwiftUI `Animation.spring(response:dampingFraction:)` (stiffness (2 pi / response)^2, damping 2 zeta sqrt(stiffness), mass 1): the real ControlCenter's animations are
+ * SwiftUI springs, the constants were read from its code (docs/development/CONTROLCENTER-ANIMATIONS.md). */
+CASpringAnimation *CCSwiftUISpring(NSString *keyPath, double response, double dampingFraction);

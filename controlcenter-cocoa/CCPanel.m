@@ -116,13 +116,15 @@ static CGRect editPill(CGRect panel) { return CGRectMake(1074, CGRectGetMaxY(pan
 - (void)redraw { if (!win) return; CGImageRef img = [self newImage]; CCSetBandedContents(layer, img, 32); CGImageRelease(img); [CATransaction flush]; [gallery redraw]; }
 
 /* ---- window ---- */
-/* APPROXIMATE (not measured: the real panel is SwiftUI / RenderBox, its animations are not in the CoreAnimation stream and the VM has no GPU): the panel fades in over 0.2 s and settles from 94 % with a spring, about its top-right corner (the side of the status item) */
+/* The real ControlCenter animates with SwiftUI springs; the constants of its code (22 Animation.spring call sites, REA: docs/development/CONTROLCENTER-ANIMATIONS.md): (response, damping) = (0.4867, 1.0) x7, (0.5, 1.0) x5, (0.5, 0.85) x5,
+ * (0.33, 0.825) x2, (0.33, 1.0), (0.15, 0.85), (0.5, 0.3), (0.6283, 0.7333).  Which call site is the panel's opening is NOT identified (the sites are static Animation values without names): the open uses the most used one, (0.4867, 1.0),
+ * on the scale and the opacity; the scale from 94 % about the top-right corner is a GUESS, the fade-out of 0.12 s too. */
 - (void)animateOpen
 {
 	CGFloat ax = kPanelX + kPanelW - kWindow.origin.x, ay = kWindow.size.height - kPanelY, cx = kWindow.size.width / 2, cy = kWindow.size.height / 2;
 	CATransform3D s = CATransform3DMakeScale(0.94, 0.94, 1), from = CATransform3DConcat(CATransform3DConcat(CATransform3DMakeTranslation(-(ax - cx), -(ay - cy), 0), s), CATransform3DMakeTranslation(ax - cx, ay - cy, 0));
-	CASpringAnimation *sp = [CASpringAnimation animationWithKeyPath: @"transform"]; sp.fromValue = [NSValue valueWithCATransform3D: from]; sp.toValue = [NSValue valueWithCATransform3D: CATransform3DIdentity]; sp.mass = 1; sp.stiffness = 300; sp.damping = 24; sp.duration = sp.settlingDuration;
-	CABasicAnimation *fade = [CABasicAnimation animationWithKeyPath: @"opacity"]; fade.fromValue = @0; fade.toValue = @1; fade.duration = 0.2; fade.timingFunction = [CAMediaTimingFunction functionWithName: kCAMediaTimingFunctionEaseOut];
+	CASpringAnimation *sp = CCSwiftUISpring(@"transform", 0.4867, 1.0); sp.fromValue = [NSValue valueWithCATransform3D: from]; sp.toValue = [NSValue valueWithCATransform3D: CATransform3DIdentity];
+	CASpringAnimation *fade = CCSwiftUISpring(@"opacity", 0.4867, 1.0); fade.fromValue = @0; fade.toValue = @1;
 	[layer addAnimation: sp forKey: @"open-scale"]; [layer addAnimation: fade forKey: @"open-fade"]; [CATransaction flush];
 }
 - (void)show

@@ -138,3 +138,9 @@ void CCSetBandedContentsFade(CALayer *layer, CGImageRef img, int bh, BOOL fade)
 		l.contents = (__bridge id)band; CGImageRelease(band);
 	}
 }
+
+CASpringAnimation *CCSwiftUISpring(NSString *keyPath, double response, double zeta)
+{
+	CASpringAnimation *a = [CASpringAnimation animationWithKeyPath: keyPath]; double k = pow(2 * M_PI / response, 2);
+	a.mass = 1; a.stiffness = k; a.damping = 2 * zeta * sqrt(k); a.initialVelocity = 0; a.duration = a.settlingDuration; return a;
+}
