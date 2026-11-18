@@ -4,6 +4,7 @@
 #import "../dock-cocoa/SkyLightAPI.h"
 #import <CoreText/CoreText.h>
 #import <objc/message.h>
+#import <dlfcn.h>
 #import <QuartzCore/QuartzCore.h>
 
 enum { ItemSpotlight, ItemControl, ItemClock };
@@ -11,11 +12,17 @@ enum { ItemSpotlight, ItemControl, ItemClock };
 static const CGRect kFrames[3] = { {1063, 0, 31, 30}, {1094, 0, 42, 30}, {1136, 0, 144, 30} };
 static const uint32_t kKeys[3] = { 0x7fffffd0, 0x7fffffe1, 0x7ffffff5 };       /* clock and Control Center: real values; Spotlight's guessed */
 
+static BOOL themeIsDark(void)
+{
+	static int (*get)(void); if (!get) { void *h = dlopen("/System/Library/PrivateFrameworks/SkyLight.framework/SkyLight", RTLD_LAZY); if (h) get = dlsym(h, "SLSGetAppearanceThemeLegacy"); }
+	return get ? get() != 0 : YES;
+}
 static CGImageRef render(int item, CGSize s)
 {
 	CGColorSpaceRef cs = CGColorSpaceCreateDeviceRGB();
 	CGContextRef c = CGBitmapContextCreate(NULL, s.width, s.height, 8, 0, cs, kCGImageAlphaPremultipliedFirst | kCGBitmapByteOrder32Little);
-	CGContextSetRGBFillColor(c, 1, 1, 1, 1); CGContextSetRGBStrokeColor(c, 1, 1, 1, 1);
+	CGFloat ink = themeIsDark() ? 1 : 0;            /* white on the dark menu bar, black on the light one */
+	CGContextSetRGBFillColor(c, ink, ink, ink, 1); CGContextSetRGBStrokeColor(c, ink, ink, ink, 1);
 	CGFloat cx = s.width / 2, cy = s.height / 2;
 	if (item == ItemSpotlight) {                           /* magnifier */
 		CGContextSetLineWidth(c, 1.6);
@@ -87,6 +94,6 @@ static CGImageRef render(int item, CGSize s)
 		}
 	}
 	[self refresh];
-	[NSTimer scheduledTimerWithTimeInterval: 10 repeats: YES block: ^(NSTimer *t) { (void)t; [self refresh]; }];
+	[NSTimer scheduledTimerWithTimeInterval: 1 repeats: YES block: ^(NSTimer *t) { (void)t; static BOOL last = YES; static int n; BOOL d = themeIsDark(); if (d != last || ++n >= 10) { last = d; n = 0; [self refresh]; } }];       /* the clock every 10 s, the theme at once */
 }
 @end

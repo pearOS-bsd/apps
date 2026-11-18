@@ -4,10 +4,22 @@
 #import "../dock-cocoa/SkyLightAPI.h"
 #import <CoreText/CoreText.h>
 #import <QuartzCore/QuartzCore.h>
+#import <dlfcn.h>
 
 /* window of the real panel: 800,0 656 x 964 (level 22; larger than the panel: room for the shadow, partly off screen); the panel itself x 966..1274, y 34..533 */
 static const CGRect kWindow = { {800, 0}, {656, 964} };
 static const CGRect kPanel = { {966, 34}, {308, 499} };
+/* appearance: SLSGetAppearanceThemeLegacy (1 = dark); light-mode values sampled from the real panel (2026-11-18, same VM, no GPU: flat colours) */
+static BOOL darkTheme(void)
+{
+	static int (*get)(void); if (!get) { void *h = dlopen("/System/Library/PrivateFrameworks/SkyLight.framework/SkyLight", RTLD_LAZY); if (h) get = dlsym(h, "SLSGetAppearanceThemeLegacy"); }
+	return get ? get() != 0 : YES;
+}
+static void setDarkTheme(BOOL dark)
+{
+	static void (*set)(int); if (!set) { void *h = dlopen("/System/Library/PrivateFrameworks/SkyLight.framework/SkyLight", RTLD_LAZY); if (h) set = dlsym(h, "SLSSetAppearanceThemeLegacy"); }
+	if (set) set(dark ? 1 : 0);
+}
 typedef struct { CGRect r; CGFloat radius; int kind; const char *title, *sub; } Tile;
 enum { KWifi, KBluetooth, KAirDrop, KNowPlaying, KStage, KMirror, KAppearance, KShot, KFocus, KDisplay, KSound, KEdit };
 static const Tile kTiles[] = {
@@ -58,12 +70,13 @@ static CGImageRef renderPanel(void)
 	CGContextRef c = CGBitmapContextCreate(NULL, W, H, 8, 0, cs, kCGImageAlphaPremultipliedFirst | kCGBitmapByteOrder32Little);
 	CGContextTranslateCTM(c, -kWindow.origin.x, H + kWindow.origin.y); CGContextScaleCTM(c, 1, -1);       /* screen coordinates, y down */
 	CGColorRef col;
-	col = grey(61, 1); CGContextSetFillColorWithColor(c, col); CGColorRelease(col); rrect(c, kPanel, 37); CGContextFillPath(c);
+	BOOL dark = darkTheme();
+	col = grey(dark ? 61 : 219, 1); CGContextSetFillColorWithColor(c, col); CGColorRelease(col); rrect(c, kPanel, 37); CGContextFillPath(c);
 	CGContextSetLineCap(c, kCGLineCapRound);
 	for (size_t i = 0; i < sizeof kTiles / sizeof *kTiles; i++) {
 		const Tile *t = &kTiles[i]; CGRect r = t->r; CGPoint ctr = CGPointMake(CGRectGetMidX(r), CGRectGetMidY(r));
-		BOOL white = t->kind == KAppearance;
-		col = grey(white ? 255 : 111, 1); CGContextSetFillColorWithColor(c, col); CGColorRelease(col); rrect(c, r, t->radius); CGContextFillPath(c);
+		BOOL white = t->kind == KAppearance && dark;           /* the Dark Mode button is white when dark mode is on */
+		col = grey(white ? 255 : (dark ? 111 : 109), 1); CGContextSetFillColorWithColor(c, col); CGColorRelease(col); rrect(c, r, t->radius); CGContextFillPath(c);
 		col = grey(white ? 0 : 255, 1); CGContextSetStrokeColorWithColor(c, col); CGContextSetFillColorWithColor(c, col); CGColorRelease(col); CGContextSetLineWidth(c, 1.6);
 		switch (t->kind) {
 		case KWifi: case KBluetooth: case KAirDrop: {
@@ -90,7 +103,7 @@ static CGImageRef renderPanel(void)
 			break; }
 		case KStage: CGContextStrokeRect(c, CGRectMake(ctr.x - 2, ctr.y - 8, 15, 16)); CGContextFillRect(c, CGRectMake(ctr.x - 13, ctr.y - 8, 3, 3)); CGContextFillRect(c, CGRectMake(ctr.x - 13, ctr.y - 2, 3, 3)); CGContextFillRect(c, CGRectMake(ctr.x - 13, ctr.y + 4, 3, 3)); break;
 		case KMirror: rrect(c, CGRectMake(ctr.x - 13, ctr.y - 10, 18, 14), 2.5); CGContextStrokePath(c); rrect(c, CGRectMake(ctr.x - 5, ctr.y - 4, 18, 14), 2.5); CGContextStrokePath(c); break;
-		case KAppearance: CGContextFillEllipseInRect(c, CGRectMake(ctr.x - 10, ctr.y - 10, 20, 20)); col = grey(255, 1); CGContextSetFillColorWithColor(c, col); CGColorRelease(col); CGContextAddArc(c, ctr.x, ctr.y, 10, -M_PI / 2, M_PI / 2, 1); CGContextFillPath(c); break;
+		case KAppearance: CGContextFillEllipseInRect(c, CGRectMake(ctr.x - 10, ctr.y - 10, 20, 20)); col = grey(dark ? 255 : 0, 1);       /* two-tone disc: black with a white half on the white button, the opposite on the grey one */ CGContextSetFillColorWithColor(c, col); CGColorRelease(col); CGContextAddArc(c, ctr.x, ctr.y, 10, -M_PI / 2, M_PI / 2, 1); CGContextFillPath(c); break;
 		case KShot: rrect(c, CGRectMake(ctr.x - 8, ctr.y - 5, 16, 11), 2); CGContextStrokePath(c); CGContextStrokeEllipseInRect(c, CGRectMake(ctr.x - 3.5, ctr.y - 3, 7, 7)); break;
 		case KFocus: glyphCircle(c, CGPointMake(r.origin.x + 31.5, ctr.y), 34, 147); col = grey(255, 1); CGContextSetFillColorWithColor(c, col); CGColorRelease(col);
 			CGContextAddArc(c, r.origin.x + 31.5, ctr.y, 9, 0.4, 2 * M_PI - 0.4, 0); CGContextAddArc(c, r.origin.x + 36.5, ctr.y - 3, 8, 2 * M_PI - 0.4 - 0.9, 0.4 + 0.9, 1); CGContextFillPath(c); break;
@@ -127,5 +140,20 @@ static CGImageRef renderPanel(void)
 	[win orderIn];
 }
 - (void)hide { if (!win) return; const SkyLightAPI *sl = SkyLightLoad(); if (sl && sl->ReleaseWindow) sl->ReleaseWindow(sl->MainConnectionID(), win.windowID); win = nil; layer = nil; }
+- (void)redraw
+{
+	if (!win) return;
+	CGImageRef img = renderPanel(); layer.contents = (__bridge id)img; CGImageRelease(img); [CATransaction flush];
+}
+- (BOOL)clickAtScreenPoint:(CGPoint)pt
+{
+	if (!win) return NO;
+	for (size_t i = 0; i < sizeof kTiles / sizeof *kTiles; i++) {
+		if (!CGRectContainsPoint(kTiles[i].r, pt)) continue;
+		if (kTiles[i].kind == KAppearance) { setDarkTheme(!darkTheme()); [self performSelector: @selector(redraw) withObject: nil afterDelay: 0.3]; }
+		return YES;
+	}
+	return CGRectContainsPoint(kPanel, pt);
+}
 - (void)toggle { if (win) [self hide]; else [self show]; }
 @end

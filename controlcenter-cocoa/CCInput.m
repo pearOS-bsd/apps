@@ -9,7 +9,8 @@ static CGEventRef onEvent(CGEventTapProxy proxy, CGEventType type, CGEventRef ev
 	if (type == kCGEventLeftMouseDown) {
 		CGPoint p = CGEventGetLocation(ev);
 		if (CGRectContainsPoint(self->item, p)) { dispatch_async(dispatch_get_main_queue(), ^{ [self->panel toggle]; }); return NULL; }
-		if (self->panel.visible && ![self->panel containsScreenPoint: p]) dispatch_async(dispatch_get_main_queue(), ^{ [self->panel hide]; });
+		if (self->panel.visible && [self->panel containsScreenPoint: p]) { dispatch_async(dispatch_get_main_queue(), ^{ [self->panel clickAtScreenPoint: p]; }); return NULL; }
+		if (self->panel.visible) dispatch_async(dispatch_get_main_queue(), ^{ [self->panel hide]; });
 	}
 	return ev;
 }

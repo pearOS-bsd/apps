@@ -4,5 +4,7 @@
 @property (readonly) BOOL visible;
 - (void)toggle;
 - (void)hide;
+- (void)redraw;                                           /* after an appearance change */
+- (BOOL)clickAtScreenPoint:(CGPoint)p;                  /* a click inside the panel: YES when it belongs to the panel */
 - (BOOL)containsScreenPoint:(CGPoint)p;
 @end
