@@ -81,6 +81,7 @@ static CGImageRef render(int item, CGSize s)
 	const SkyLightAPI *sl = SkyLightLoad(); const CCSkyLight *cc = CCSkyLightLoad();
 	if (!sl) return;
 	for (int i = 0; i < 3; i++) {
+		if (i == ItemSpotlight) continue;               /* the Spotlight magnifier is Spotlight's own menu-bar item, not ControlCenter's: the real ControlCenter registers only two status windows (dtrace: the clock and the Control Center icon) */
 		wins[i] = [[DockWindow alloc] initWithFrame: kFrames[i] level: 25 options: 0x10000];
 		if (!wins[i]) { NSLog(@"cc: window %d not created", i); continue; }
 		CALayer *l = [CALayer layer]; l.frame = CGRectMake(0, 0, kFrames[i].size.width, kFrames[i].size.height);
@@ -109,7 +110,7 @@ static CGImageRef render(int item, CGSize s)
 			sl->TransactionCommit(tx, 1); CFRelease(tx);
 		}
 	}
-	extras = [[CCExtras alloc] initWithAnchorX: kFrames[ItemSpotlight].origin.x]; [extras sync];
+	extras = [[CCExtras alloc] initWithAnchorX: kFrames[ItemControl].origin.x]; [extras sync];
 	[self refresh];
 	[NSTimer scheduledTimerWithTimeInterval: 1 repeats: YES block: ^(NSTimer *t) { (void)t; static BOOL last = YES; static int n; BOOL d = themeIsDark(); [extras sync]; if (d != last || ++n >= 10) { last = d; n = 0; [self refresh]; last = d; } }];       /* the clock every 10 s, the theme at once */
 }
