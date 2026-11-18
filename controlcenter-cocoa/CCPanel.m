@@ -123,9 +123,17 @@ static CGRect editPill(CGRect panel) { return CGRectMake(1074, CGRectGetMaxY(pan
 {
 	CGFloat ax = kPanelX + kPanelW - kWindow.origin.x, ay = kWindow.size.height - kPanelY, cx = kWindow.size.width / 2, cy = kWindow.size.height / 2;
 	CATransform3D s = CATransform3DMakeScale(0.94, 0.94, 1), from = CATransform3DConcat(CATransform3DConcat(CATransform3DMakeTranslation(-(ax - cx), -(ay - cy), 0), s), CATransform3DMakeTranslation(ax - cx, ay - cy, 0));
-	CASpringAnimation *sp = CCSwiftUISpring(@"transform", 0.4867, 1.0); sp.fromValue = [NSValue valueWithCATransform3D: from]; sp.toValue = [NSValue valueWithCATransform3D: CATransform3DIdentity];
-	CASpringAnimation *fade = CCSwiftUISpring(@"opacity", 0.4867, 1.0); fade.fromValue = @0; fade.toValue = @1;
+	CASpringAnimation *sp = CCSwiftUISpring(@"transform", 0.5, 1.0); sp.fromValue = [NSValue valueWithCATransform3D: from]; sp.toValue = [NSValue valueWithCATransform3D: CATransform3DIdentity];
+	CASpringAnimation *fade = CCSwiftUISpring(@"opacity", 0.5, 1.0); fade.fromValue = @0; fade.toValue = @1;
 	[layer addAnimation: sp forKey: @"open-scale"]; [layer addAnimation: fade forKey: @"open-fade"]; [CATransaction flush];
+}
+/* a page replaces the panel (modal anchored to the tile: the real code uses interpolatingSpring(mass 2, stiffness 300, damping 50) in "modalAnchoredFromDisplayable", read from the binary) */
+- (void)animatePageIn
+{
+	CGRect r = [self panelRect]; CGFloat ax = CGRectGetMaxX(r) - kWindow.origin.x, ay = kWindow.size.height - r.origin.y, cx = kWindow.size.width / 2, cy = kWindow.size.height / 2;
+	CATransform3D s = CATransform3DMakeScale(0.96, 0.96, 1), from = CATransform3DConcat(CATransform3DConcat(CATransform3DMakeTranslation(-(ax - cx), -(ay - cy), 0), s), CATransform3DMakeTranslation(ax - cx, ay - cy, 0));
+	CASpringAnimation *sp = [CASpringAnimation animationWithKeyPath: @"transform"]; sp.mass = 2; sp.stiffness = 300; sp.damping = 50; sp.duration = sp.settlingDuration;
+	sp.fromValue = [NSValue valueWithCATransform3D: from]; sp.toValue = [NSValue valueWithCATransform3D: CATransform3DIdentity]; [layer addAnimation: sp forKey: @"page-scale"]; [CATransaction flush];
 }
 - (void)show
 {
@@ -214,7 +222,7 @@ static CGRect editPill(CGRect panel) { return CGRectMake(1074, CGRectGetMaxY(pan
 		}
 		return YES;
 	}
-	if (!moved && CCPageRows(ct.kind) && ((ct.kind == CCDisplay || ct.kind == CCSound) ? pressPoint.y < [ct frame].origin.y + 28 : ([ct entry]->w == 2 && pressPoint.x > [ct frame].origin.x + 52))) { pageKind = ct.kind; pageX = 0; pageRows = CCPageRows(pageKind); hasPage = YES; [self redrawFading]; return YES; }
+	if (!moved && CCPageRows(ct.kind) && ((ct.kind == CCDisplay || ct.kind == CCSound) ? pressPoint.y < [ct frame].origin.y + 28 : ([ct entry]->w == 2 && pressPoint.x > [ct frame].origin.x + 52))) { pageKind = ct.kind; pageX = 0; pageRows = CCPageRows(pageKind); hasPage = YES; [self redrawFading]; [self animatePageIn]; return YES; }
 	if (!moved) { CCPerform(ct.kind); [self performSelector: @selector(redrawFading) withObject: nil afterDelay: 0.25]; }
 	return YES;
 }
