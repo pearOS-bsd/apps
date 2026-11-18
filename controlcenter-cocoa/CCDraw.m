@@ -122,3 +122,17 @@ void CCGlyph(CGContextRef c, NSString *n, CGPoint o, CGFloat size)
 	} else { CGContextFillEllipseInRect(c, CGRectMake(-5, -5, 10, 10)); }
 	CGContextRestoreGState(c);
 }
+
+void CCSetBandedContents(CALayer *layer, CGImageRef img, int bh)
+{
+	size_t w = CGImageGetWidth(img), h = CGImageGetHeight(img); NSUInteger n = (h + bh - 1) / bh;
+	NSArray *old = [layer.sublayers copy]; BOOL reuse = old.count == n;
+	if (!reuse) { for (CALayer *l in old) [l removeFromSuperlayer]; }
+	layer.contents = nil;
+	for (NSUInteger i = 0; i < n; i++) {
+		size_t y0 = i * bh, rows = MIN((size_t)bh, h - y0); CGImageRef band = CGImageCreateWithImageInRect(img, CGRectMake(0, y0, w, rows)); if (!band) continue;
+		CALayer *l = reuse ? old[i] : [CALayer layer];
+		if (!reuse) { l.frame = CGRectMake(0, h - y0 - rows, w, rows); l.contentsGravity = kCAGravityResize; [layer addSublayer: l]; }
+		l.contents = (__bridge id)band; CGImageRelease(band);
+	}
+}

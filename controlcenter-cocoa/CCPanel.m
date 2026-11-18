@@ -112,7 +112,7 @@ static CGRect editPill(CGRect panel) { return CGRectMake(1074, CGRectGetMaxY(pan
 	}
 	return CCEndBitmap(c);
 }
-- (void)redraw { if (!win) return; CGImageRef img = [self newImage]; layer.contents = (__bridge id)img; CGImageRelease(img); [CATransaction flush]; [gallery redraw]; }
+- (void)redraw { if (!win) return; CGImageRef img = [self newImage]; CCSetBandedContents(layer, img, 32); CGImageRelease(img); [CATransaction flush]; [gallery redraw]; }
 
 /* ---- window ---- */
 - (void)show
@@ -121,7 +121,7 @@ static CGRect editPill(CGRect panel) { return CGRectMake(1074, CGRectGetMaxY(pan
 	win = [[DockWindow alloc] initWithFrame: kWindow level: 22 options: 0x10000];
 	if (!win) { NSLog(@"cc: panel window not created"); return; }
 	layer = [CALayer layer]; layer.frame = CGRectMake(0, 0, kWindow.size.width, kWindow.size.height);
-	CGImageRef img = [self newImage]; layer.contents = (__bridge id)img; CGImageRelease(img);
+	CGImageRef img = [self newImage]; CCSetBandedContents(layer, img, 32); CGImageRelease(img);
 	[win setRootLayer: layer];
 	if (cc->SetWindowClientPerceivedType) cc->SetWindowClientPerceivedType(sl->MainConnectionID(), win.windowID, 5);
 	[win orderIn];

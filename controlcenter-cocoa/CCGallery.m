@@ -22,7 +22,7 @@ typedef struct { CGRect r; int idx; } Hit;
 	const SkyLightAPI *sl = SkyLightLoad(); const CCSkyLight *cc = CCSkyLightLoad(); if (!sl) return self;
 	win = [[DockWindow alloc] initWithFrame: kFrame level: 23 options: 0x10000]; if (!win) return self;
 	layer = [CALayer layer]; layer.frame = CGRectMake(0, 0, kFrame.size.width, kFrame.size.height);
-	CGImageRef img = [self newImage]; layer.contents = (__bridge id)img; CGImageRelease(img);
+	CGImageRef img = [self newImage]; CCSetBandedContents(layer, img, 32); CGImageRelease(img);
 	[win setRootLayer: layer];
 	if (cc->SetWindowClientPerceivedType) cc->SetWindowClientPerceivedType(sl->MainConnectionID(), win.windowID, 5);
 	[win orderIn];
@@ -30,7 +30,7 @@ typedef struct { CGRect r; int idx; } Hit;
 }
 - (void)close { if (!win) return; const SkyLightAPI *sl = SkyLightLoad(); if (sl && sl->ReleaseWindow) sl->ReleaseWindow(sl->MainConnectionID(), win.windowID); win = nil; layer = nil; }
 - (BOOL)containsScreenPoint:(CGPoint)p { return win && CGRectContainsPoint(kFrame, p); }
-- (void)redraw { if (!win) return; CGImageRef img = [self newImage]; layer.contents = (__bridge id)img; CGImageRelease(img); [CATransaction flush]; }
+- (void)redraw { if (!win) return; CGImageRef img = [self newImage]; CCSetBandedContents(layer, img, 32); CGImageRelease(img); [CATransaction flush]; }
 - (void)scrollBy:(double)dy { scroll = MAX(0, MIN(MAX(0, contentH - (kFrame.size.height - kFooterH - 20)), scroll - dy)); [self redraw]; }
 - (void)typeText:(NSString *)s { if ([s isEqual: @"\b"]) { if (query.length) [query deleteCharactersInRange: NSMakeRange(query.length - 1, 1)]; } else [query appendString: s]; scroll = 0; [self redraw]; }
 

@@ -14,3 +14,8 @@ void CCText(CGContextRef c, NSString *s, CGFloat x, CGFloat baseline, CGFloat si
 double CCTextWidth(NSString *s, CGFloat size, BOOL bold);
 /* named vector glyphs drawn with the current fill/stroke colour, centred on ctr, roughly `size` points wide */
 void CCGlyph(CGContextRef c, NSString *name, CGPoint ctr, CGFloat size);
+
+/* Puts a large image on a layer as horizontal bands (sublayers of bandHeight rows).  A layer with one big CGImage (the 656 x 964 panel) did not reach the render server of pearOS at all
+ * (its commit never arrived: images of this size are handled differently by CoreAnimation); bands of ~80 KB travel like the small images of the status items.  Harmless on a Mac. */
+#import <QuartzCore/QuartzCore.h>
+void CCSetBandedContents(CALayer *layer, CGImageRef img, int bandHeight);
