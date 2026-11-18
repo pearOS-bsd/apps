@@ -1,6 +1,7 @@
 #import "CCStatusBar.h"
 #import "CCSkyLight.h"
 #import "CCDraw.h"
+#import "CCExtras.h"
 #import "../dock-cocoa/DockWindow.h"
 #import "../dock-cocoa/SkyLightAPI.h"
 #import <CoreText/CoreText.h>
@@ -52,7 +53,8 @@ static CGImageRef render(int item, CGSize s)
 }
 
 @implementation CCStatusBar
-{ DockWindow *wins[3]; CALayer *layers[3]; DockWindow *plusWin; }
+{ DockWindow *wins[3]; CALayer *layers[3]; DockWindow *plusWin; CCExtras *extras; }
+- (CCExtras *)extras { return extras; }
 - (void)refresh
 {
 	for (int i = 0; i < 3; i++) {
@@ -106,7 +108,8 @@ static CGImageRef render(int item, CGSize s)
 			sl->TransactionCommit(tx, 1); CFRelease(tx);
 		}
 	}
+	extras = [[CCExtras alloc] initWithAnchorX: kFrames[ItemSpotlight].origin.x]; [extras sync];
 	[self refresh];
-	[NSTimer scheduledTimerWithTimeInterval: 1 repeats: YES block: ^(NSTimer *t) { (void)t; static BOOL last = YES; static int n; BOOL d = themeIsDark(); if (d != last || ++n >= 10) { last = d; n = 0; [self refresh]; } }];       /* the clock every 10 s, the theme at once */
+	[NSTimer scheduledTimerWithTimeInterval: 1 repeats: YES block: ^(NSTimer *t) { (void)t; static BOOL last = YES; static int n; BOOL d = themeIsDark(); [extras sync]; if (d != last || ++n >= 10) { last = d; n = 0; [self refresh]; last = d; } }];       /* the clock every 10 s, the theme at once */
 }
 @end

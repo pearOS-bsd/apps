@@ -1,14 +1,16 @@
 #import "CCInput.h"
 #import "CCGallery.h"
+#import "CCExtras.h"
 #import <ApplicationServices/ApplicationServices.h>
 @implementation CCInput
-{ CCPanel *panel; CGRect item; CFMachPortRef tap; BOOL swallowUp; }
+{ CCPanel *panel; CCStatusBar *bar; CGRect item; CFMachPortRef tap; BOOL swallowUp; }
 static CGEventRef onEvent(CGEventTapProxy proxy, CGEventType type, CGEventRef ev, void *ref)
 {
 	CCInput *self = (__bridge CCInput *)ref; CCPanel *panel = self->panel;
 	if (type == kCGEventTapDisabledByTimeout || type == kCGEventTapDisabledByUserInput) { CGEventTapEnable(self->tap, true); return ev; }
 	CGPoint p = CGEventGetLocation(ev);
 	if (type == kCGEventLeftMouseDown) {
+		CCKind ek; CGFloat mid; if (self->bar && [[self->bar extras] kindAtPoint: p kind: &ek midX: &mid]) { self->swallowUp = YES; dispatch_async(dispatch_get_main_queue(), ^{ [panel toggleExtra: ek atX: mid]; }); return NULL; }
 		if (CGRectContainsPoint(self->item, p)) { self->swallowUp = YES; dispatch_async(dispatch_get_main_queue(), ^{ [panel toggle]; }); return NULL; }
 		if (panel.visible && [panel containsScreenPoint: p]) { self->swallowUp = YES; dispatch_async(dispatch_get_main_queue(), ^{ [panel mouseDown: p]; }); return NULL; }
 		if (panel.visible && !panel.editing) dispatch_async(dispatch_get_main_queue(), ^{ [panel hide]; });
@@ -26,10 +28,10 @@ static CGEventRef onEvent(CGEventTapProxy proxy, CGEventType type, CGEventRef ev
 	}
 	return ev;
 }
-- (instancetype)initWithPanel:(CCPanel *)p controlItemFrame:(CGRect)f
+- (instancetype)initWithPanel:(CCPanel *)p controlItemFrame:(CGRect)f statusBar:(CCStatusBar *)b
 {
 	if (!(self = [super init])) return nil;
-	panel = p; item = f;
+	panel = p; item = f; bar = b;
 	CGEventMask m = CGEventMaskBit(kCGEventLeftMouseDown) | CGEventMaskBit(kCGEventLeftMouseUp) | CGEventMaskBit(kCGEventLeftMouseDragged) | CGEventMaskBit(kCGEventScrollWheel) | CGEventMaskBit(kCGEventKeyDown);
 	tap = CGEventTapCreate(kCGSessionEventTap, kCGHeadInsertEventTap, kCGEventTapOptionDefault, m, onEvent, (__bridge void *)self);
 	if (!tap) { NSLog(@"cc: no event tap (AXIsProcessTrusted %d, listen %d, post %d)", AXIsProcessTrusted(), CGPreflightListenEventAccess(), CGPreflightPostEventAccess()); return self; }

@@ -7,6 +7,7 @@ extern NSString *const CCEditModeChanged;
 @property (readonly) BOOL editing;
 - (void)toggle;
 - (void)hide;
+- (void)toggleExtra:(CCKind)k atX:(CGFloat)itemMidX;      /* menu-bar extra clicked */
 - (void)redraw;                                           /* after any change of state, layout or appearance */
 - (void)setEditing:(BOOL)on;                              /* "Edit Controls" / "Done" */
 - (BOOL)addControl:(CCKind)k;                             /* from the gallery */

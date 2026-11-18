@@ -16,13 +16,13 @@ static CGRect editPill(CGRect panel) { return CGRectMake(1074, CGRectGetMaxY(pan
 @implementation CCPanel
 {
 	DockWindow *win; CALayer *layer; BOOL editing; CCGallery *gallery;
-	CCKind pageKind; BOOL hasPage; NSArray<CCRow *> *pageRows; CCControl *pressed; CGPoint pressPoint; BOOL moved; CCControl *dragSlider; NSTimer *poll;
+	CCKind pageKind; BOOL hasPage; CGFloat pageX; NSArray<CCRow *> *pageRows; CCControl *pressed; CGPoint pressPoint; BOOL moved; CCControl *dragSlider; NSTimer *poll;
 }
 - (BOOL)visible { return win != nil; }
 - (BOOL)editing { return editing; }
 - (CGRect)panelRect
 {
-	if (hasPage) return CGRectMake(964, 36, 308, 2 + pageRows.count * 40);
+	if (hasPage) return CGRectMake(pageX ?: 964, 36, 308, 2 + pageRows.count * 40);
 	int rows = [CCLayout shared].rows; if (editing) rows = MIN(rows + 2, CCMaxRows());
 	CGFloat lastBottom = 42 + (rows - 1) * 76 + 63;
 	return CGRectMake(kPanelX, kPanelY, kPanelW, lastBottom + (editing ? 7 : 48) - kPanelY);
@@ -130,9 +130,16 @@ static CGRect editPill(CGRect panel) { return CGRectMake(1074, CGRectGetMaxY(pan
 - (void)hide
 {
 	if (!win) return;
-	hasPage = NO; pageRows = nil;
+	hasPage = NO; pageRows = nil; pageX = 0;
 	[self setEditing: NO]; [poll invalidate]; poll = nil;
 	const SkyLightAPI *sl = SkyLightLoad(); if (sl && sl->ReleaseWindow) sl->ReleaseWindow(sl->MainConnectionID(), win.windowID); win = nil; layer = nil;
+}
+- (void)toggleExtra:(CCKind)k atX:(CGFloat)itemMidX                  /* a click on a menu-bar extra: the page of the control under it */
+{
+	if (win && hasPage && pageKind == k) { [self hide]; return; }
+	if (win) [self hide];
+	[self show]; pageKind = k; pageRows = CCPageRows(k); if (!pageRows) { [self hide]; return; }
+	hasPage = YES; pageX = MAX(8, MIN(1272 - 308, itemMidX - 154)); [self redraw];
 }
 - (void)toggle { if (win) [self hide]; else [self show]; }
 - (void)setEditing:(BOOL)on
@@ -192,7 +199,7 @@ static CGRect editPill(CGRect panel) { return CGRectMake(1074, CGRectGetMaxY(pan
 		}
 		return YES;
 	}
-	if (!moved && CCPageRows(ct.kind) && ((ct.kind == CCDisplay || ct.kind == CCSound) ? pressPoint.y < [ct frame].origin.y + 28 : ([ct entry]->w == 2 && pressPoint.x > [ct frame].origin.x + 52))) { pageKind = ct.kind; pageRows = CCPageRows(pageKind); hasPage = YES; [self redraw]; return YES; }
+	if (!moved && CCPageRows(ct.kind) && ((ct.kind == CCDisplay || ct.kind == CCSound) ? pressPoint.y < [ct frame].origin.y + 28 : ([ct entry]->w == 2 && pressPoint.x > [ct frame].origin.x + 52))) { pageKind = ct.kind; pageX = 0; pageRows = CCPageRows(pageKind); hasPage = YES; [self redraw]; return YES; }
 	if (!moved) { CCPerform(ct.kind); [self performSelector: @selector(redraw) withObject: nil afterDelay: 0.25]; }
 	return YES;
 }
