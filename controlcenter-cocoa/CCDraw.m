@@ -3,8 +3,19 @@
 #import <dlfcn.h>
 
 static void *skylight(void) { static void *h; if (!h) h = dlopen("/System/Library/PrivateFrameworks/SkyLight.framework/SkyLight", RTLD_LAZY); return h; }
-BOOL CCDarkTheme(void) { static int (*get)(void); if (!get && skylight()) get = dlsym(skylight(), "SLSGetAppearanceThemeLegacy"); return get ? get() != 0 : YES; }
-void CCSetDarkTheme(BOOL dark) { static void (*set)(int); if (!set && skylight()) set = dlsym(skylight(), "SLSSetAppearanceThemeLegacy"); if (set) set(dark ? 1 : 0); }
+/* pearOS fallback: no SLSGetAppearanceThemeLegacy; the appearance is the key AppleInterfaceStyle of ~/Library/Preferences/.GlobalPreferences.plist (as the earlier Control Center did; a missing key = dark, the image's default) */
+static NSString *globalPrefs(void) { return [NSHomeDirectory() stringByAppendingPathComponent: @"Library/Preferences/.GlobalPreferences.plist"]; }
+BOOL CCDarkTheme(void)
+{
+	static int (*get)(void); if (!get && skylight()) get = dlsym(skylight(), "SLSGetAppearanceThemeLegacy"); if (get) return get() != 0;
+	id v = [NSDictionary dictionaryWithContentsOfFile: globalPrefs()][@"AppleInterfaceStyle"]; return !v || [v caseInsensitiveCompare: @"Dark"] == NSOrderedSame;
+}
+void CCSetDarkTheme(BOOL dark)
+{
+	static void (*set)(int); if (!set && skylight()) set = dlsym(skylight(), "SLSSetAppearanceThemeLegacy"); if (set) { set(dark ? 1 : 0); return; }
+	NSMutableDictionary *p = [[NSDictionary dictionaryWithContentsOfFile: globalPrefs()] mutableCopy] ?: [NSMutableDictionary dictionary]; p[@"AppleInterfaceStyle"] = dark ? @"Dark" : @"Light";
+	[[NSFileManager defaultManager] createDirectoryAtPath: [globalPrefs() stringByDeletingLastPathComponent] withIntermediateDirectories: YES attributes: nil error: NULL]; [p writeToFile: globalPrefs() atomically: YES];
+}
 
 static CGColorSpaceRef rgb(void) { static CGColorSpaceRef cs; if (!cs) cs = CGColorSpaceCreateDeviceRGB(); return cs; }
 CGContextRef CCBeginBitmap(CGSize size, CGPoint origin)

@@ -33,6 +33,7 @@ CGRect CCCellRect(int col, int row, int w, int h);      /* screen rectangle of a
 int CCMaxRows(void);
 
 /* actions */
+NSString *CCFocusActiveMode(void); void CCFocusSet(NSString *mode); NSString *CCFocusName(NSString *mode);
 NSString *CCStateText(CCKind k);         /* "Off", "On", subtitle, or nil */
 BOOL CCIsOn(CCKind k);
 void CCPerform(CCKind k);                /* a click on the control */

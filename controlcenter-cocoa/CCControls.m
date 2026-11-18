@@ -5,6 +5,7 @@
 #import <ImageIO/ImageIO.h>
 #import <crt_externs.h>
 #import "CCDraw.h"
+#import "CCPlatform.h"
 
 /* ---- catalog (the gallery of the real Edit Controls: categories and suggestions seen on 26.7.2; the sets inside a category are partly guessed) ---- */
 static const CCCatalogEntry kCatalog[] = {
@@ -92,11 +93,56 @@ static void *lib(const char *p) { return dlopen(p, RTLD_LAZY); }
 static BOOL prefBool(CFStringRef key, CFStringRef app) { CFPropertyListRef v = CFPreferencesCopyAppValue(key, app); BOOL b = v && CFGetTypeID(v) == CFBooleanGetTypeID() && CFBooleanGetValue(v); if (v) CFRelease(v); return b; }
 static void setPrefBool(CFStringRef key, CFStringRef app, BOOL b) { CFPreferencesSetAppValue(key, b ? kCFBooleanTrue : kCFBooleanFalse, app); CFPreferencesAppSynchronize(app); }
 
+/* Focus: the DoNotDisturb framework (private; needs the com.apple.private.donotdisturb.* entitlements of the real ControlCenter, listed in docs/development/CONTROLCENTER-REPLACEMENT.md; without them the XPC call fails with BSServiceConnectionErrorDomain 3).
+ * Checked on the Mac VM with a probe signed with those entitlements: take / read / invalidate an assertion works. Client identifier: com.apple.controlcenter.dnd (the real one's, Info.plist DNDClientIdentifier). */
+static id dndService(void)
+{
+	static id svc; if (svc) return svc; lib("/System/Library/PrivateFrameworks/DoNotDisturb.framework/DoNotDisturb"); Class C = NSClassFromString(@"DNDModeAssertionService");
+	if (C) svc = ((id (*)(Class, SEL, id))objc_msgSend)(C, sel_registerName("serviceForClientIdentifier:"), @"com.apple.controlcenter.dnd"); return svc;
+}
+/* pearOS: no DoNotDisturb framework; Focus lives in usernoted (d/bsd/usernoted, protocol WSUserNotificationRequests: setFocus: / focusWithReply:), reached over NSXPC as the earlier Control Center did.  Only one mode (on / off). */
+@protocol CCUserNotifications <NSObject>
+- (void)registerClientWithInfo:(NSDictionary *)info reply:(void (^)(BOOL ok))reply;
+- (void)setFocus:(BOOL)on;
+- (void)focusWithReply:(void (^)(BOOL on))reply;
+@end
+static NSXPCConnection *unConn; static BOOL unFocus;
+static id<CCUserNotifications> unDaemon(void)
+{
+	if (!unConn) {
+		unConn = [[NSXPCConnection alloc] initWithMachServiceName: @"com.apple.usernoted" options: 0]; unConn.remoteObjectInterface = [NSXPCInterface interfaceWithProtocol: @protocol(CCUserNotifications)];
+		unConn.invalidationHandler = ^{ unConn = nil; }; unConn.interruptionHandler = ^{ unConn = nil; }; [unConn resume];
+		[[unConn remoteObjectProxy] registerClientWithInfo: @{ @"bundle": @"com.apple.controlcenter", @"name": @"Control Center", @"role": @"shell" } reply: ^(BOOL ok) { (void)ok; }];
+	}
+	return [unConn remoteObjectProxyWithErrorHandler: ^(NSError *e) { (void)e; unConn = nil; }];
+}
+static BOOL haveDND(void) { return dndService() != nil; }
+NSString *CCFocusActiveMode(void)           /* the mode identifier of the active assertion, nil when no Focus is on */
+{
+	if (!haveDND()) { [unDaemon() focusWithReply: ^(BOOL on) { unFocus = on; }]; return unFocus ? @"com.apple.donotdisturb.mode.default" : nil; }
+	id s = dndService(); NSError *e = nil;
+	id a = ((id (*)(id, SEL, NSError **))objc_msgSend)(s, sel_registerName("activeModeAssertionWithError:"), &e); if (!a) return nil;
+	id d = ((id (*)(id, SEL))objc_msgSend)(a, sel_registerName("details")); return d ? ((id (*)(id, SEL))objc_msgSend)(d, sel_registerName("modeIdentifier")) : nil;
+}
+void CCFocusSet(NSString *mode)             /* mode nil: turn the active Focus off */
+{
+	if (!haveDND()) { unFocus = mode != nil; [unDaemon() setFocus: unFocus]; return; }
+	id s = dndService(); NSError *e = nil;
+	if (!mode) { ((id (*)(id, SEL, NSError **))objc_msgSend)(s, sel_registerName("invalidateActiveModeAssertionWithError:"), &e); return; }
+	id life = ((id (*)(Class, SEL))objc_msgSend)(NSClassFromString(@"DNDModeAssertionLifetime"), sel_registerName("lifetimeForUserRequest"));
+	id d = ((id (*)(Class, SEL, id, id, id))objc_msgSend)(NSClassFromString(@"DNDModeAssertionDetails"), sel_registerName("userRequestedAssertionDetailsWithIdentifier:modeIdentifier:lifetime:"), @"com.apple.controlcenter.dnd", mode, life);
+	((id (*)(id, SEL, id, NSError **))objc_msgSend)(s, sel_registerName("takeModeAssertionWithDetails:error:"), d, &e);
+}
+NSString *CCFocusName(NSString *mode)
+{
+	static NSDictionary *n; if (!n) n = @{ @"com.apple.donotdisturb.mode.default": @"Do Not Disturb", @"com.apple.sleep.sleep-mode": @"Sleep", @"com.apple.focus.personal-time": @"Personal", @"com.apple.focus.work": @"Work", @"com.apple.donotdisturb.mode.driving": @"Driving", @"com.apple.focus.reading": @"Reading", @"com.apple.focus.gaming": @"Gaming", @"com.apple.focus.mindfulness": @"Mindfulness", @"com.apple.focus.fitness": @"Fitness" };
+	return n[mode] ?: mode;
+}
 /* Wi-Fi: CoreWLAN (CWWiFiClient.sharedWiFiClient.interface.powerOn / setPower:error:); nil interface on a machine without a Wi-Fi card */
 static id wifiInterface(void) { lib("/System/Library/Frameworks/CoreWLAN.framework/CoreWLAN"); Class C = NSClassFromString(@"CWWiFiClient"); id cl = C ? ((id (*)(Class, SEL))objc_msgSend)(C, sel_registerName("sharedWiFiClient")) : nil; return cl ? ((id (*)(id, SEL))objc_msgSend)(cl, sel_registerName("interface")) : nil; }
 /* Bluetooth: IOBluetooth's preference functions (IOBluetoothPreferenceGetControllerPowerState / ...Set...) */
-static int btGet(void) { void *h = lib("/System/Library/Frameworks/IOBluetooth.framework/IOBluetooth"); int (*f)(void) = h ? dlsym(h, "IOBluetoothPreferenceGetControllerPowerState") : NULL; return f ? f() : 0; }
-static void btSet(int on) { void *h = lib("/System/Library/Frameworks/IOBluetooth.framework/IOBluetooth"); void (*f)(int) = h ? dlsym(h, "IOBluetoothPreferenceSetControllerPowerState") : NULL; if (f) f(on); }
+static int btGet(void) { void *h = lib("/System/Library/Frameworks/IOBluetooth.framework/IOBluetooth"); int (*f)(void) = h ? dlsym(h, "IOBluetoothPreferenceGetControllerPowerState") : NULL; if (f) return f(); int p = ccp_bluetooth_power(); return p > 0; }
+static void btSet(int on) { void *h = lib("/System/Library/Frameworks/IOBluetooth.framework/IOBluetooth"); void (*f)(int) = h ? dlsym(h, "IOBluetoothPreferenceSetControllerPowerState") : NULL; if (f) f(on); else ccp_bluetooth_set(on); }
 /* MediaRemote */
 void CCMediaCommand(int cmd) { void *h = lib("/System/Library/PrivateFrameworks/MediaRemote.framework/MediaRemote"); int (*f)(int, id) = h ? dlsym(h, "MRMediaRemoteSendCommand") : NULL; if (f) f(cmd, nil); }
 static NSString *npTitle, *npArtist; static CGImageRef npArt; static BOOL npPlaying;
@@ -123,20 +169,22 @@ void CCNowPlayingStart(void)
 double CCSliderGet(CCKind k)
 {
 	if (k == CCDisplay) { void *h = lib("/System/Library/PrivateFrameworks/DisplayServices.framework/DisplayServices"); int (*f)(uint32_t, float *) = h ? dlsym(h, "DisplayServicesGetBrightness") : NULL; float v = 0; if (f && f(CGMainDisplayID(), &v) == 0) return v; }
+	{ double v = k == CCDisplay ? ccp_brightness_get() : k == CCKeyboardBrightness ? ccp_kbd_get() : ccp_volume_get(); if (v >= 0) return v; }       /* FreeBSD: backlight(8) / ACPI, clevo_dchu, mixer(8) */
 	NSNumber *n = [[NSUserDefaults standardUserDefaults] objectForKey: k == CCDisplay ? @"pearos.cc.display" : @"pearos.cc.sound"]; return n ? n.doubleValue : 0;
 }
 void CCSliderSet(CCKind k, double v)
 {
 	if (k == CCDisplay) { void *h = lib("/System/Library/PrivateFrameworks/DisplayServices.framework/DisplayServices"); int (*f)(uint32_t, float) = h ? dlsym(h, "DisplayServicesSetBrightness") : NULL; if (f) f(CGMainDisplayID(), (float)v); }
+	if (k == CCDisplay) ccp_brightness_set(v); else if (k == CCKeyboardBrightness) ccp_kbd_set(v); else ccp_volume_set(v);
 	[[NSUserDefaults standardUserDefaults] setObject: @(v) forKey: k == CCDisplay ? @"pearos.cc.display" : @"pearos.cc.sound"];          /* TODO(feature): CoreAudio kAudioHardwareServiceDeviceProperty_VirtualMainVolume */
 }
 NSString *CCStateText(CCKind k)
 {
 	switch (k) {
-	case CCWifi: { id i = wifiInterface(); return i && ((BOOL (*)(id, SEL))objc_msgSend)(i, sel_registerName("powerOn")) ? @"On" : @"Off"; }
+	case CCWifi: { id i = wifiInterface(); if (!i) return ccp_wifi_power() > 0 ? @"On" : @"Off"; return ((BOOL (*)(id, SEL))objc_msgSend)(i, sel_registerName("powerOn")) ? @"On" : @"Off"; }
 	case CCBluetooth: return btGet() ? @"On" : @"Off";
 	case CCAirDrop: { CFPropertyListRef v = CFPreferencesCopyAppValue(CFSTR("DiscoverableMode"), CFSTR("com.apple.sharingd")); NSString *s = v ? (__bridge_transfer NSString *)v : @"Off"; return [s isEqual: @"Off"] ? @"Off" : s; }
-	case CCFocus: return prefBool(CFSTR("pearos.cc.focus"), CFSTR("com.apple.controlcenter")) ? @"Do Not Disturb" : nil;
+	case CCFocus: { NSString *m = CCFocusActiveMode(); return m ? CCFocusName(m) : nil; }
 	default: return nil;
 	}
 }
@@ -146,7 +194,7 @@ BOOL CCIsOn(CCKind k)
 	case CCDarkMode: return CCDarkTheme();
 	case CCStageManager: return prefBool(CFSTR("GloballyEnabled"), CFSTR("com.apple.WindowManager"));
 	case CCWifi: case CCBluetooth: case CCAirDrop: return [CCStateText(k) isEqual: @"On"] || ([CCStateText(k) length] && ![CCStateText(k) isEqual: @"Off"]);
-	case CCFocus: return prefBool(CFSTR("pearos.cc.focus"), CFSTR("com.apple.controlcenter"));
+	case CCFocus: return CCFocusActiveMode() != nil;
 	default: return NO;
 	}
 }
@@ -155,10 +203,10 @@ void CCPerform(CCKind k)
 	switch (k) {
 	case CCDarkMode: CCSetDarkTheme(!CCDarkTheme()); break;
 	case CCStageManager: setPrefBool(CFSTR("GloballyEnabled"), CFSTR("com.apple.WindowManager"), !CCIsOn(k)); break;       /* the Dock/WindowManager picks the preference up on its notification (TODO(verify)) */
-	case CCWifi: { id i = wifiInterface(); if (i) { NSError *e = nil; ((BOOL (*)(id, SEL, BOOL, NSError **))objc_msgSend)(i, sel_registerName("setPower:error:"), !CCIsOn(k), &e); } break; }
+	case CCWifi: { id i = wifiInterface(); if (!i) { ccp_wifi_set(!CCIsOn(k)); break; } { NSError *e = nil; ((BOOL (*)(id, SEL, BOOL, NSError **))objc_msgSend)(i, sel_registerName("setPower:error:"), !CCIsOn(k), &e); } break; }
 	case CCBluetooth: btSet(!btGet()); break;
 	case CCAirDrop: CFPreferencesSetAppValue(CFSTR("DiscoverableMode"), CCIsOn(k) ? CFSTR("Off") : CFSTR("Contacts Only"), CFSTR("com.apple.sharingd")); CFPreferencesAppSynchronize(CFSTR("com.apple.sharingd")); break;
-	case CCFocus: setPrefBool(CFSTR("pearos.cc.focus"), CFSTR("com.apple.controlcenter"), !CCIsOn(k)); break;          /* TODO(verify): the real toggle goes through the DoNotDisturb framework */
+	case CCFocus: CCFocusSet(CCIsOn(k) ? nil : @"com.apple.donotdisturb.mode.default"); break;
 	case CCScreenshot: openApp("Screenshot"); break;
 	case CCScreenMirroring: spawn("/usr/bin/open", "x-apple.systempreferences:com.apple.Displays-Settings.extension", NULL, NULL); break;
 	case CCAlarm: case CCStopwatch: case CCTimer: case CCClockMenu: openApp("Clock"); break;
@@ -187,7 +235,11 @@ NSArray<CCRow *> *CCPageRows(CCKind k)
 		NSString *m = CCStateText(CCAirDrop); void (^set)(NSString *) = ^(NSString *v) { CFPreferencesSetAppValue(CFSTR("DiscoverableMode"), (__bridge CFStringRef)v, CFSTR("com.apple.sharingd")); CFPreferencesAppSynchronize(CFSTR("com.apple.sharingd")); };
 		return @[ [CCRow row: CCRowHeader title: @"AirDrop" on: NO action: nil], [CCRow row: CCRowRadio title: @"Contacts Only" on: [m isEqual: @"Contacts Only"] action: ^{ set(@"Contacts Only"); }],
 			[CCRow row: CCRowRadio title: @"Everyone for 10 Minutes" on: [m isEqual: @"Everyone"] action: ^{ set(@"Everyone"); }], [CCRow row: CCRowLink title: @"AirDrop Settings…" on: NO action: ^{ CCOpenSettings(@"com.apple.Sharing-Settings.extension"); }] ]; }
-	case CCFocus: return @[ [CCRow row: CCRowHeader title: @"Focus" on: NO action: nil], [CCRow row: CCRowRadio title: @"Do Not Disturb" on: CCIsOn(CCFocus) action: ^{ CCPerform(CCFocus); }], [CCRow row: CCRowLink title: @"Focus Settings…" on: NO action: ^{ CCOpenSettings(@"com.apple.Focus-Settings.extension"); }] ];
+	case CCFocus: {
+		NSString *cur = CCFocusActiveMode(); NSMutableArray *rows = [NSMutableArray arrayWithObject: [CCRow row: CCRowHeader title: @"Focus" on: NO action: nil]];
+		for (NSString *m in @[ @"com.apple.donotdisturb.mode.default", @"com.apple.sleep.sleep-mode", @"com.apple.focus.personal-time", @"com.apple.focus.work" ])
+			[rows addObject: [CCRow row: CCRowRadio title: CCFocusName(m) on: [cur isEqual: m] action: ^{ CCFocusSet([cur isEqual: m] ? nil : m); }]];
+		[rows addObject: [CCRow row: CCRowLink title: @"Focus Settings…" on: NO action: ^{ CCOpenSettings(@"com.apple.Focus-Settings.extension"); }]]; return rows; }
 	case CCSound: return @[ [CCRow row: CCRowHeader title: @"Output" on: NO action: nil], [CCRow row: CCRowLink title: @"Sound Settings…" on: NO action: ^{ CCOpenSettings(@"com.apple.Sound-Settings.extension"); }] ];
 	case CCDisplay: return @[ [CCRow row: CCRowHeader title: @"Display" on: NO action: nil], [CCRow row: CCRowSwitch title: @"Dark Mode" on: CCDarkTheme() action: ^{ CCPerform(CCDarkMode); }], [CCRow row: CCRowLink title: @"Display Settings…" on: NO action: ^{ CCOpenSettings(@"com.apple.Displays-Settings.extension"); }] ];
 	default: return nil;

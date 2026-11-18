@@ -1,5 +1,6 @@
 #import "CCExtras.h"
 #import "CCDraw.h"
+#import "CCPlatform.h"
 #import "CCSkyLight.h"
 #import "../dock-cocoa/DockWindow.h"
 #import "../dock-cocoa/SkyLightAPI.h"
@@ -22,9 +23,9 @@ static BOOL available(CCKind k)
 {
 	if (getenv("CC_FORCE_EXTRAS") || prefOn("pearos.forceExtras")) return YES;     /* test switch: defaults write com.apple.controlcenter "NSStatusItem VisibleCC pearos.forceExtras" -bool true */
 	switch (k) {
-	case CCBattery: { CFTypeRef i = IOPSCopyPowerSourcesInfo(); CFArrayRef l = i ? IOPSCopyPowerSourcesList(i) : NULL; BOOL has = l && CFArrayGetCount(l) > 0; if (l) CFRelease(l); if (i) CFRelease(i); return has; }
-	case CCWifi: { Class C = NSClassFromString(@"CWWiFiClient"); id cl = C ? ((id (*)(Class, SEL))objc_msgSend)(C, sel_registerName("sharedWiFiClient")) : nil; return cl && ((id (*)(id, SEL))objc_msgSend)(cl, sel_registerName("interface")) != nil; }
-	case CCBluetooth: return CCStateText(CCBluetooth) != nil && CFPreferencesCopyAppValue(CFSTR("ControllerPowerState"), CFSTR("/Library/Preferences/com.apple.Bluetooth")) != NULL;
+	case CCBattery: if (ccp_battery_percent() >= 0) return YES; { CFTypeRef i = IOPSCopyPowerSourcesInfo(); CFArrayRef l = i ? IOPSCopyPowerSourcesList(i) : NULL; BOOL has = l && CFArrayGetCount(l) > 0; if (l) CFRelease(l); if (i) CFRelease(i); return has; }
+	case CCWifi: if (ccp_wifi_power() >= 0) return YES; { Class C = NSClassFromString(@"CWWiFiClient"); id cl = C ? ((id (*)(Class, SEL))objc_msgSend)(C, sel_registerName("sharedWiFiClient")) : nil; return cl && ((id (*)(id, SEL))objc_msgSend)(cl, sel_registerName("interface")) != nil; }
+	case CCBluetooth: if (ccp_bluetooth_power() >= 0) return YES; return CCStateText(CCBluetooth) != nil && CFPreferencesCopyAppValue(CFSTR("ControllerPowerState"), CFSTR("/Library/Preferences/com.apple.Bluetooth")) != NULL;
 	case CCFocus: return CCIsOn(CCFocus);
 	default: return YES;
 	}
