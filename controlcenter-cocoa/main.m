@@ -4,10 +4,12 @@
 #import "CCServices.h"
 #import "CCStatusBar.h"
 #import "CCSkyLightStartup.h"
+#import "CCPrefs.h"
 int main(int argc, const char *argv[])
 {
 	@autoreleasepool {
 		[CCServices connectAll];
+		CCReadPreferences();
 		CCSkyLightStartup();
 		CCStatusBar *bar = [CCStatusBar new]; [bar start];
 		if (getenv("CC_WINDOW")) { for (double t = 0; t < atof(getenv("CC_WINDOW")); t += 0.1) [[NSRunLoop currentRunLoop] runUntilDate: [NSDate dateWithTimeIntervalSinceNow: 0.1]]; }

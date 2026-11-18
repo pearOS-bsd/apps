@@ -1,0 +1,1 @@
+void CCReadPreferences(void);
