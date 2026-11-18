@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
-"""Side-by-side comparison of the same pane rendered on macOS (AppKit) and on BSD (GNUstep on wsd).
+"""Side-by-side comparison of the same pane rendered on macOS (AppKit) and on BSD (GNUstep on WindowServer).
 usage: sidebyside.py MAC.png BSD_SCREEN.png OUT.png [--diff]
-MAC.png is a window screenshot (screencapture -l, with or without shadow); BSD_SCREEN.png a whole wsd screenshot: the window is located by its
+MAC.png is a window screenshot (screencapture -l, with or without shadow); BSD_SCREEN.png a whole WindowServer screenshot: the window is located by its
 title bar colour. Writes the two renderings next to each other and a difference image, and prints the mean absolute difference."""
 import sys
 from PIL import Image, ImageChops
@@ -10,7 +10,7 @@ mac = Image.open(sys.argv[1]).convert("RGBA"); bsd = Image.open(sys.argv[2]).con
 bbox = mac.split()[3].point(lambda a: 255 if a > 250 else 0).getbbox()
 mac = mac.crop(bbox) if bbox else mac
 W, H = mac.size
-# the window on wsd: the top-most row with a long run of title bar colour; the run's left end (minus the 1 px rim) is the window's left edge
+# the window on WindowServer: the top-most row with a long run of title bar colour; the run's left end (minus the 1 px rim) is the window's left edge
 px = bsd.load(); sw, sh = bsd.size
 tb = mac.convert("RGB").load()[W // 2, 20]                    # the mac title bar colour, sampled in the middle of the bar
 def near(c): return all(abs(c[i] - tb[i]) <= 6 for i in range(3))

@@ -1,4 +1,4 @@
-# Terminal: make test (the emulator, no UI), make mac (Cocoa on macOS), make gnustep (GNUstep AppKit, e.g. on FreeBSD with the wsd display server)
+# Terminal: make test (the emulator, no UI), make mac (Cocoa on macOS), make gnustep (GNUstep AppKit, e.g. on FreeBSD with the WindowServer display server)
 CC ?= cc
 SRC = src/vt.c src/pty.c
 

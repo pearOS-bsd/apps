@@ -1,5 +1,5 @@
 # Keyboard Setup Assistant (behaviour recovered from Apple's app with REA; the code is new Objective-C written against the public Cocoa API only):
-# the same sources build against Apple's AppKit (make mac) and GNUstep (make gnustep, on wsd).
+# the same sources build against Apple's AppKit (make mac) and GNUstep (make gnustep, on WindowServer).
 SRC = src/main.m
 CFLAGS_MAC = -fno-objc-arc -fobjc-exceptions -Wno-deprecated-declarations
 mac: KeyboardSetupAssistant-mac

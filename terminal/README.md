@@ -1,6 +1,6 @@
 # Terminal
 
-A terminal emulator application written from scratch against the **public** Cocoa API, as a probe for the wsbsd stack: build it with GNUstep on FreeBSD, run it on `wsd`, and see what the
+A terminal emulator application written from scratch against the **public** Cocoa API, as a probe for the wsbsd stack: build it with GNUstep on FreeBSD, run it on `WindowServer`, and see what the
 display server, AppKit and the graphics layers are missing for a real macOS application.
 
 It is not a copy of Apple's Terminal.app: no Apple code or decompiled code is used. What was taken from the real application is its list of dependencies (below).
@@ -18,4 +18,4 @@ DataDetectorsCore (private), CoreAnalytics (private), libncurses, libicucore, li
 into layers; the window server sees layer-backed windows.
 
 ## What this exercise showed is missing
-See `docs/GAPS.md`, updated as the application is run on wsd.
+See `docs/GAPS.md`, updated as the application is run on WindowServer.

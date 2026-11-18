@@ -10,7 +10,7 @@
 
 int main(int argc, char **argv)
 {
-	ws_conn *c = ws_connect(NULL); if (!c) { fprintf(stderr, "wsgenie: no wsd\n"); return 1; }
+	ws_conn *c = ws_connect(NULL); if (!c) { fprintf(stderr, "wsgenie: no WindowServer\n"); return 1; }
 	int sw = 1280, sh = 800; ws_conn_screen(c, &sw, &sh);
 	ws_rect f = { 200, 120, 560, 380 }; ws_win win;
 	if (ws_win_create(c, f, 0, &win)) return 1;

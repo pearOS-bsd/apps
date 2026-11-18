@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Per-control side-by-side of the gallery rendered on macOS (AppKit) and BSD (GNUstep on wsd).
+"""Per-control side-by-side of the gallery rendered on macOS (AppKit) and BSD (GNUstep on WindowServer).
 usage: compare.py MAC.png BSD_SCREEN.png MANIFEST OUT.png   (prints a table of mean absolute differences per control)"""
 import sys
 from PIL import Image, ImageChops, ImageDraw

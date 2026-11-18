@@ -1,7 +1,7 @@
-# Gaps found by running Terminal on wsd (updated as we go)
+# Gaps found by running Terminal on WindowServer (updated as we go)
 - `UniChar` is a CoreFoundation typedef, not in GNUstep's Foundation: use `unichar` (fixed in TermView.m).
 
-## First run on wsd (FreeBSD, GNUstep AppKit, software compositor) — 2026-10-15
+## First run on WindowServer (FreeBSD, GNUstep AppKit, software compositor) — 2026-10-15
 Works: window creation and resize, a login shell on a pty, 80x24 grid drawing with colours (SGR 16 / 256 / bold), cursor, keyboard input through the display server (`wskey`), the emulator
 (`make test`), the menu, close box. Screenshot: `terminal.png` in the `freebsd-appkit-screenshot` CI artifact.
 
