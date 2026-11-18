@@ -16,12 +16,13 @@ static CGRect editPill(CGRect panel) { return CGRectMake(1074, CGRectGetMaxY(pan
 @implementation CCPanel
 {
 	DockWindow *win; CALayer *layer; BOOL editing; CCGallery *gallery;
-	CCControl *pressed; CGPoint pressPoint; BOOL moved; CCControl *dragSlider; NSTimer *poll;
+	CCKind pageKind; BOOL hasPage; NSArray<CCRow *> *pageRows; CCControl *pressed; CGPoint pressPoint; BOOL moved; CCControl *dragSlider; NSTimer *poll;
 }
 - (BOOL)visible { return win != nil; }
 - (BOOL)editing { return editing; }
 - (CGRect)panelRect
 {
+	if (hasPage) return CGRectMake(964, 36, 308, 2 + pageRows.count * 40);
 	int rows = [CCLayout shared].rows; if (editing) rows = MIN(rows + 2, CCMaxRows());
 	CGFloat lastBottom = 42 + (rows - 1) * 76 + 63;
 	return CGRectMake(kPanelX, kPanelY, kPanelW, lastBottom + (editing ? 7 : 48) - kPanelY);
@@ -47,10 +48,13 @@ static CGRect editPill(CGRect panel) { return CGRectMake(1074, CGRectGetMaxY(pan
 		else { CCGlyph(c, @"speaker", CGPointMake(r.origin.x + 20, y), 16); CCGlyph(c, @"speaker.wave", CGPointMake(r.origin.x + 231, y), 16); CCFillDisc(c, CGPointMake(r.origin.x + 265, y), 26, 147); CCFillGrey(c, 255, 1); CCGlyph(c, @"airplay", CGPointMake(r.origin.x + 265, y), 16); }
 		break; }
 	case CCNowPlaying: {
-		CCFillRRect(c, CGRectMake(r.origin.x + 14, r.origin.y + 12, 40, 40), 8, 138);
-		CCText(c, @"Not Playing", r.origin.x + 14, r.origin.y + 83, 13, YES, 255, 0);
-		CGFloat by = r.origin.y + 111; CCFillGrey(c, 255, 1); CCGlyph(c, @"play", CGPointMake(r.origin.x + 70, by), 24);
-		CCFillGrey(c, 160, 1); CCGlyph(c, @"rewind", CGPointMake(r.origin.x + 33, by), 24); CCGlyph(c, @"forward", CGPointMake(r.origin.x + 110, by), 24);
+		NSString *title = CCNowPlayingTitle(), *artist = CCNowPlayingArtist(); CGImageRef art = CCNowPlayingArtwork();
+		CGRect ar = CGRectMake(r.origin.x + 14, r.origin.y + 12, 40, 40);
+		if (art) { CGContextSaveGState(c); CCRRect(c, ar, 8); CGContextClip(c); CGContextTranslateCTM(c, ar.origin.x, ar.origin.y + 40); CGContextScaleCTM(c, 1, -1); CGContextDrawImage(c, CGRectMake(0, 0, 40, 40), art); CGContextRestoreGState(c); }
+		else CCFillRRect(c, ar, 8, 138);
+		CCText(c, title ?: @"Not Playing", r.origin.x + 14, r.origin.y + (artist ? 76 : 83), 13, YES, 255, 0); if (artist) CCText(c, artist, r.origin.x + 14, r.origin.y + 92, 12, NO, 200, 0);
+		CGFloat by = r.origin.y + 111; CCFillGrey(c, 255, 1); CCGlyph(c, CCNowPlayingIsPlaying() ? @"pause" : @"play", CGPointMake(r.origin.x + 70, by), 24);
+		CCFillGrey(c, title ? 255 : 160, 1); CCGlyph(c, @"rewind", CGPointMake(r.origin.x + 33, by), 24); CCGlyph(c, @"forward", CGPointMake(r.origin.x + 110, by), 24);
 		break; }
 	default:
 		if (disc1) { CCGlyph(c, [NSString stringWithUTF8String: e->glyph], ctr, 22); }
@@ -70,10 +74,27 @@ static CGRect editPill(CGRect panel) { return CGRectMake(1074, CGRectGetMaxY(pan
 		}
 	}
 }
+- (void)drawPage:(CGContextRef)c in:(CGRect)r dark:(BOOL)dark
+{
+	CCFillRRect(c, r, 20, dark ? 111 : 109); CGFloat y = r.origin.y + 1;
+	for (NSUInteger i = 0; i < pageRows.count; i++) {
+		CCRow *row = pageRows[i]; CGFloat mid = y + 20;
+		if (i > 0) { CCFillGrey(c, 131, 1); CGContextFillRect(c, CGRectMake(r.origin.x + 14, y, r.size.width - 28, 1)); }
+		BOOL bold = row.type == CCRowSwitch || row.type == CCRowHeader;
+		CCText(c, row.title, r.origin.x + 14, mid + 4.5, 13, bold, 255, 0);
+		if (row.type == CCRowSwitch) {                                           /* measured: track 57 x 24, knob a 32 x 20 pill */
+			CGRect tr = CGRectMake(r.origin.x + 236, mid - 12, 57, 24); CCFillRRect(c, tr, 12, 104); if (row.on) { CCFillRGB(c, 10, 132, 255); CCRRect(c, tr, 12); CGContextFillPath(c); }
+			CCFillRRect(c, CGRectMake(row.on ? CGRectGetMaxX(tr) - 38 : tr.origin.x + 6, mid - 10, 32, 20), 10, 255);
+		}
+		if (row.type == CCRowRadio && row.on) { CCFillRGB(c, 10, 132, 255); CGContextFillEllipseInRect(c, CGRectMake(r.origin.x + r.size.width - 34, mid - 8, 16, 16)); CCFillGrey(c, 255, 1); CGContextSetLineWidth(c, 1.8); CGContextMoveToPoint(c, r.origin.x + r.size.width - 30, mid); CGContextAddLineToPoint(c, r.origin.x + r.size.width - 27, mid + 3); CGContextAddLineToPoint(c, r.origin.x + r.size.width - 22, mid - 3); CGContextStrokePath(c); }
+		y += 40;
+	}
+}
 - (CGImageRef)newImage
 {
 	BOOL dark = CCDarkTheme(); CGRect panel = [self panelRect];
 	CGContextRef c = CCBeginBitmap(kWindow.size, kWindow.origin);
+	if (hasPage) { [self drawPage: c in: panel dark: dark]; return CCEndBitmap(c); }
 	CCFillRRect(c, panel, 37, dark ? (editing ? 58 : 61) : 219);
 	CCLayout *lay = [CCLayout shared];
 	for (CCControl *ct in lay.controls) [self drawControl: ct in: c dark: dark];
@@ -109,6 +130,7 @@ static CGRect editPill(CGRect panel) { return CGRectMake(1074, CGRectGetMaxY(pan
 - (void)hide
 {
 	if (!win) return;
+	hasPage = NO; pageRows = nil;
 	[self setEditing: NO]; [poll invalidate]; poll = nil;
 	const SkyLightAPI *sl = SkyLightLoad(); if (sl && sl->ReleaseWindow) sl->ReleaseWindow(sl->MainConnectionID(), win.windowID); win = nil; layer = nil;
 }
@@ -131,6 +153,7 @@ static CGRect editPill(CGRect panel) { return CGRectMake(1074, CGRectGetMaxY(pan
 	CGRect r = [c frame]; BOOL disp = c.kind != CCSound; CGFloat x0 = r.origin.x + (disp ? 36 : 34), x1 = r.origin.x + (disp ? 254 : 216);
 	CCSliderSet(c.kind, MAX(0, MIN(1, (x - x0) / (x1 - x0)))); [self redraw];
 }
+- (void)refreshPage { if (hasPage) { pageRows = CCPageRows(pageKind); [self redraw]; } }
 - (BOOL)mouseDown:(CGPoint)p
 {
 	if (!win) return NO;
@@ -140,6 +163,11 @@ static CGRect editPill(CGRect panel) { return CGRectMake(1074, CGRectGetMaxY(pan
 	if (editing) {
 		for (CCControl *c in [lay.controls copy]) { CGRect r = [c frame]; if (hypot(p.x - (r.origin.x + 8), p.y - (r.origin.y + 8)) <= 10) { [lay remove: c]; [self redraw]; return YES; } }
 		pressed = ct; pressPoint = p; return YES;
+	}
+	if (hasPage) {
+		CGRect pr = [self panelRect]; NSInteger i = (NSInteger)floor((p.y - pr.origin.y - 1) / 40);
+		if (i >= 0 && i < (NSInteger)pageRows.count) { CCRow *row = pageRows[i]; if (row.action) row.action(); pageRows = CCPageRows(pageKind); [self performSelector: @selector(refreshPage) withObject: nil afterDelay: 0.3]; [self redraw]; }
+		return YES;
 	}
 	if (CGRectContainsPoint(editPill([self panelRect]), p)) { [self setEditing: YES]; return YES; }
 	CCControl *s = [self sliderAt: p]; if (s && p.y > [s frame].origin.y + 28) { dragSlider = s; [self setSlider: s atX: p.x]; return YES; }
@@ -164,6 +192,7 @@ static CGRect editPill(CGRect panel) { return CGRectMake(1074, CGRectGetMaxY(pan
 		}
 		return YES;
 	}
+	if (!moved && CCPageRows(ct.kind) && ((ct.kind == CCDisplay || ct.kind == CCSound) ? pressPoint.y < [ct frame].origin.y + 28 : ([ct entry]->w == 2 && pressPoint.x > [ct frame].origin.x + 52))) { pageKind = ct.kind; pageRows = CCPageRows(pageKind); hasPage = YES; [self redraw]; return YES; }
 	if (!moved) { CCPerform(ct.kind); [self performSelector: @selector(redraw) withObject: nil afterDelay: 0.25]; }
 	return YES;
 }

@@ -2,6 +2,7 @@
 #import <dlfcn.h>
 #import <objc/message.h>
 #import <spawn.h>
+#import <ImageIO/ImageIO.h>
 #import <crt_externs.h>
 #import "CCDraw.h"
 
@@ -98,7 +99,26 @@ static int btGet(void) { void *h = lib("/System/Library/Frameworks/IOBluetooth.f
 static void btSet(int on) { void *h = lib("/System/Library/Frameworks/IOBluetooth.framework/IOBluetooth"); void (*f)(int) = h ? dlsym(h, "IOBluetoothPreferenceSetControllerPowerState") : NULL; if (f) f(on); }
 /* MediaRemote */
 void CCMediaCommand(int cmd) { void *h = lib("/System/Library/PrivateFrameworks/MediaRemote.framework/MediaRemote"); int (*f)(int, id) = h ? dlsym(h, "MRMediaRemoteSendCommand") : NULL; if (f) f(cmd, nil); }
-NSString *CCNowPlayingTitle(void) { return nil; }          /* TODO(feature): MRMediaRemoteGetNowPlayingInfo (asynchronous, block based) */
+static NSString *npTitle, *npArtist; static CGImageRef npArt; static BOOL npPlaying;
+NSString *CCNowPlayingTitle(void) { return npTitle; }
+NSString *CCNowPlayingArtist(void) { return npArtist; }
+CGImageRef CCNowPlayingArtwork(void) { return npArt; }
+BOOL CCNowPlayingIsPlaying(void) { return npPlaying; }
+void CCNowPlayingStart(void)
+{
+	void *h = lib("/System/Library/PrivateFrameworks/MediaRemote.framework/MediaRemote"); if (!h) return;
+	void (*info)(dispatch_queue_t, void (^)(CFDictionaryRef)) = dlsym(h, "MRMediaRemoteGetNowPlayingInfo");
+	void (*playing)(dispatch_queue_t, void (^)(Boolean)) = dlsym(h, "MRMediaRemoteGetNowPlayingApplicationIsPlaying");
+	if (!info) return;
+	[NSTimer scheduledTimerWithTimeInterval: 1 repeats: YES block: ^(NSTimer *t) { (void)t;
+		info(dispatch_get_main_queue(), ^(CFDictionaryRef d) {
+			NSDictionary *n = (__bridge NSDictionary *)d; npTitle = n[@"kMRMediaRemoteNowPlayingInfoTitle"]; npArtist = n[@"kMRMediaRemoteNowPlayingInfoArtist"];
+			NSData *art = n[@"kMRMediaRemoteNowPlayingInfoArtworkData"]; if (npArt) { CGImageRelease(npArt); npArt = NULL; }
+			if (art) { CGImageSourceRef s = CGImageSourceCreateWithData((__bridge CFDataRef)art, NULL); if (s) { npArt = CGImageSourceCreateImageAtIndex(s, 0, NULL); CFRelease(s); } }
+		});
+		if (playing) playing(dispatch_get_main_queue(), ^(Boolean p) { npPlaying = p; });
+	}];
+}
 /* brightness: DisplayServices; volume: CoreAudio default output device */
 double CCSliderGet(CCKind k)
 {
@@ -150,5 +170,26 @@ void CCPerform(CCKind k)
 	case CCLockScreen: { void *h = lib("/System/Library/PrivateFrameworks/login.framework/login"); void (*f)(void) = h ? dlsym(h, "SACLockScreenImmediate") : NULL; if (f) f(); break; }
 	case CCNowPlaying: CCMediaCommand(2); break;
 	default: break;
+	}
+}
+
+/* ---- detail pages ---- */
+@implementation CCRow
++ (instancetype)row:(CCRowType)t title:(NSString *)s on:(BOOL)on action:(void (^)(void))a { CCRow *r = [CCRow new]; r.type = t; r.title = s; r.on = on; r.action = a; return r; }
+@end
+void CCOpenSettings(NSString *pane) { spawn("/usr/bin/open", [[@"x-apple.systempreferences:" stringByAppendingString: pane] UTF8String], NULL, NULL); }
+NSArray<CCRow *> *CCPageRows(CCKind k)
+{
+	switch (k) {
+	case CCWifi: return @[ [CCRow row: CCRowSwitch title: @"Wi-Fi" on: CCIsOn(CCWifi) action: ^{ CCPerform(CCWifi); }], [CCRow row: CCRowLink title: @"Wi-Fi Settings…" on: NO action: ^{ CCOpenSettings(@"com.apple.wifi-settings-extension"); }] ];
+	case CCBluetooth: return @[ [CCRow row: CCRowSwitch title: @"Bluetooth" on: CCIsOn(CCBluetooth) action: ^{ CCPerform(CCBluetooth); }], [CCRow row: CCRowLink title: @"Bluetooth Settings…" on: NO action: ^{ CCOpenSettings(@"com.apple.BluetoothSettings"); }] ];
+	case CCAirDrop: {
+		NSString *m = CCStateText(CCAirDrop); void (^set)(NSString *) = ^(NSString *v) { CFPreferencesSetAppValue(CFSTR("DiscoverableMode"), (__bridge CFStringRef)v, CFSTR("com.apple.sharingd")); CFPreferencesAppSynchronize(CFSTR("com.apple.sharingd")); };
+		return @[ [CCRow row: CCRowHeader title: @"AirDrop" on: NO action: nil], [CCRow row: CCRowRadio title: @"Contacts Only" on: [m isEqual: @"Contacts Only"] action: ^{ set(@"Contacts Only"); }],
+			[CCRow row: CCRowRadio title: @"Everyone for 10 Minutes" on: [m isEqual: @"Everyone"] action: ^{ set(@"Everyone"); }], [CCRow row: CCRowLink title: @"AirDrop Settings…" on: NO action: ^{ CCOpenSettings(@"com.apple.Sharing-Settings.extension"); }] ]; }
+	case CCFocus: return @[ [CCRow row: CCRowHeader title: @"Focus" on: NO action: nil], [CCRow row: CCRowRadio title: @"Do Not Disturb" on: CCIsOn(CCFocus) action: ^{ CCPerform(CCFocus); }], [CCRow row: CCRowLink title: @"Focus Settings…" on: NO action: ^{ CCOpenSettings(@"com.apple.Focus-Settings.extension"); }] ];
+	case CCSound: return @[ [CCRow row: CCRowHeader title: @"Output" on: NO action: nil], [CCRow row: CCRowLink title: @"Sound Settings…" on: NO action: ^{ CCOpenSettings(@"com.apple.Sound-Settings.extension"); }] ];
+	case CCDisplay: return @[ [CCRow row: CCRowHeader title: @"Display" on: NO action: nil], [CCRow row: CCRowSwitch title: @"Dark Mode" on: CCDarkTheme() action: ^{ CCPerform(CCDarkMode); }], [CCRow row: CCRowLink title: @"Display Settings…" on: NO action: ^{ CCOpenSettings(@"com.apple.Displays-Settings.extension"); }] ];
+	default: return nil;
 	}
 }

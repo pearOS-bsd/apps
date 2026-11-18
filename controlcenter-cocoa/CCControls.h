@@ -39,4 +39,17 @@ void CCPerform(CCKind k);                /* a click on the control */
 double CCSliderGet(CCKind k);            /* Display, Sound: 0..1 */
 void CCSliderSet(CCKind k, double v);
 void CCMediaCommand(int command);        /* MediaRemote: 0 play, 1 pause, 2 toggle, 4 next, 5 previous */
-NSString *CCNowPlayingTitle(void);
+NSString *CCNowPlayingTitle(void);       /* nil when nothing plays; refreshed by CCNowPlayingStart() */
+NSString *CCNowPlayingArtist(void);
+CGImageRef CCNowPlayingArtwork(void);
+BOOL CCNowPlayingIsPlaying(void);
+void CCNowPlayingStart(void);            /* polls MediaRemote once a second */
+
+/* detail pages (the small panel that replaces the main one when the chevron / label of a tile is clicked; measured on the real Wi-Fi page: 308 wide at x 964, y 36, rows 42 high, a switch on the title row, a divider, links) */
+typedef NS_ENUM(int, CCRowType) { CCRowSwitch, CCRowRadio, CCRowLink, CCRowHeader };
+@interface CCRow : NSObject
+@property CCRowType type; @property (copy) NSString *title; @property BOOL on; @property (copy) void (^action)(void);
++ (instancetype)row:(CCRowType)t title:(NSString *)s on:(BOOL)on action:(void (^)(void))a;
+@end
+NSArray<CCRow *> *CCPageRows(CCKind k);                  /* nil when the control has no page */
+void CCOpenSettings(NSString *pane);                     /* x-apple.systempreferences:<pane> */
