@@ -14,6 +14,8 @@ static CGEventRef onEvent(CGEventTapProxy proxy, CGEventType type, CGEventRef ev
 		if (CGRectContainsPoint(self->item, p)) { self->swallowUp = YES; dispatch_async(dispatch_get_main_queue(), ^{ [panel toggle]; }); return NULL; }
 		if (panel.visible && [panel containsScreenPoint: p]) { self->swallowUp = YES; dispatch_async(dispatch_get_main_queue(), ^{ [panel mouseDown: p]; }); return NULL; }
 		if (panel.visible && !panel.editing) dispatch_async(dispatch_get_main_queue(), ^{ [panel hide]; });
+	} else if (type == kCGEventMouseMoved) {
+		if (panel.visible) dispatch_async(dispatch_get_main_queue(), ^{ [panel hoverAt: p]; });
 	} else if (type == kCGEventLeftMouseDragged && self->swallowUp) {
 		dispatch_async(dispatch_get_main_queue(), ^{ [panel mouseDragged: p]; }); return NULL;
 	} else if (type == kCGEventLeftMouseUp && self->swallowUp) {
@@ -32,7 +34,7 @@ static CGEventRef onEvent(CGEventTapProxy proxy, CGEventType type, CGEventRef ev
 {
 	if (!(self = [super init])) return nil;
 	panel = p; item = f; bar = b;
-	CGEventMask m = CGEventMaskBit(kCGEventLeftMouseDown) | CGEventMaskBit(kCGEventLeftMouseUp) | CGEventMaskBit(kCGEventLeftMouseDragged) | CGEventMaskBit(kCGEventScrollWheel) | CGEventMaskBit(kCGEventKeyDown);
+	CGEventMask m = CGEventMaskBit(kCGEventMouseMoved) | CGEventMaskBit(kCGEventLeftMouseDown) | CGEventMaskBit(kCGEventLeftMouseUp) | CGEventMaskBit(kCGEventLeftMouseDragged) | CGEventMaskBit(kCGEventScrollWheel) | CGEventMaskBit(kCGEventKeyDown);
 	tap = CGEventTapCreate(kCGSessionEventTap, kCGHeadInsertEventTap, kCGEventTapOptionDefault, m, onEvent, (__bridge void *)self);
 	if (!tap) { NSLog(@"cc: no event tap (AXIsProcessTrusted %d, listen %d, post %d)", AXIsProcessTrusted(), CGPreflightListenEventAccess(), CGPreflightPostEventAccess()); return self; }
 	CFRunLoopSourceRef src = CFMachPortCreateRunLoopSource(NULL, tap, 0); CFRunLoopAddSource(CFRunLoopGetMain(), src, kCFRunLoopCommonModes); CFRelease(src); CGEventTapEnable(tap, true);

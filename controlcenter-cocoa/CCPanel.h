@@ -15,6 +15,7 @@ extern NSString *const CCEditModeChanged;
 - (BOOL)mouseDown:(CGPoint)p;                             /* YES when the panel used the event */
 - (BOOL)mouseDragged:(CGPoint)p;
 - (BOOL)mouseUp:(CGPoint)p;
+- (void)hoverAt:(CGPoint)p;                               /* the pointer moved (hover spring of the tile under it) */
 - (void)scrollGallery:(double)dy;
 - (void)typeInGallery:(NSString *)s;
 @end

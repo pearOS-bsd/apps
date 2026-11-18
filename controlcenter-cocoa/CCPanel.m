@@ -15,7 +15,7 @@ static CGRect editPill(CGRect panel) { return CGRectMake(1074, CGRectGetMaxY(pan
 
 @implementation CCPanel
 {
-	DockWindow *win; CALayer *layer; BOOL editing; CCGallery *gallery;
+	DockWindow *win; CALayer *layer, *baseLayer, *tileLayer; NSMutableArray<CALayer *> *tiles; NSMutableArray<CCControl *> *tileOwners; CCControl *hovered; BOOL editing; CCGallery *gallery;
 	CCKind pageKind; BOOL hasPage; CGFloat pageX; NSArray<CCRow *> *pageRows; CCControl *pressed; CGPoint pressPoint; BOOL moved; CCControl *dragSlider; NSTimer *poll;
 }
 - (BOOL)visible { return win != nil; }
@@ -90,6 +90,7 @@ static CGRect editPill(CGRect panel) { return CGRectMake(1074, CGRectGetMaxY(pan
 		y += 40;
 	}
 }
+/* The panel is a base (the rounded background, the empty slots of edit mode, the "Edit Controls" pill, or a page) and one small layer per control, so that a control can be animated on its own (hover and press springs, like the real SwiftUI tiles). */
 - (CGImageRef)newImage
 {
 	BOOL dark = CCDarkTheme(); CGRect panel = [self panelRect];
@@ -97,23 +98,63 @@ static CGRect editPill(CGRect panel) { return CGRectMake(1074, CGRectGetMaxY(pan
 	if (hasPage) { [self drawPage: c in: panel dark: dark]; return CCEndBitmap(c); }
 	CCFillRRect(c, panel, 37, dark ? (editing ? 58 : 61) : 219);
 	CCLayout *lay = [CCLayout shared];
-	for (CCControl *ct in lay.controls) [self drawControl: ct in: c dark: dark];
 	if (editing) {
 		int rows = MIN(lay.rows + 2, CCMaxRows());
 		for (int rw = 0; rw < rows; rw++) for (int cl = 0; cl < 4; cl++) {                      /* empty slots */
 			BOOL used = NO; for (CCControl *ct in lay.controls) { const CCCatalogEntry *e = [ct entry]; if (cl >= ct.col && cl < ct.col + e->w && rw >= ct.row && rw < ct.row + e->h) used = YES; }
 			if (!used) { CGRect r = CCCellRect(cl, rw, 1, 1); CCFillDisc(c, CGPointMake(CGRectGetMidX(r), CGRectGetMidY(r)), 63, dark ? 93 : 190); }
 		}
-		for (CCControl *ct in lay.controls) {                                                  /* the minus badges */
-			CGRect r = [ct frame]; CGPoint b = CGPointMake(r.origin.x + 8, r.origin.y + 8); CCFillDisc(c, b, 19, dark ? 66 : 120); CCFillGrey(c, 255, 1); CGContextSetLineWidth(c, 1.4); CCGlyph(c, @"minus", b, 14);
-		}
 	} else {
 		CGRect p = editPill(panel); CCFillRRect(c, p, 11.5, dark ? 111 : 109); CCText(c, @"Edit Controls", CGRectGetMidX(p), CGRectGetMidY(p) + 4.5, 13, NO, 255, 0.5);
 	}
 	return CCEndBitmap(c);
 }
-- (void)redrawFading { if (!win) return; CGImageRef img = [self newImage]; CCSetBandedContentsFade(layer, img, 32, YES); CGImageRelease(img); [CATransaction flush]; [gallery redraw]; }
-- (void)redraw { if (!win) return; CGImageRef img = [self newImage]; CCSetBandedContents(layer, img, 32); CGImageRelease(img); [CATransaction flush]; [gallery redraw]; }
+static const CGFloat kTilePad = 4;
+- (CGRect)tileFrame:(CCControl *)ct { CGRect f = CGRectInset([ct frame], -kTilePad, -kTilePad); return CGRectMake(f.origin.x - kWindow.origin.x, kWindow.size.height - (f.origin.y - kWindow.origin.y) - f.size.height, f.size.width, f.size.height); }
+- (CGImageRef)newTileImage:(CCControl *)ct
+{
+	BOOL dark = CCDarkTheme(); CGRect f = CGRectInset([ct frame], -kTilePad, -kTilePad);
+	CGContextRef c = CCBeginBitmap(f.size, f.origin); [self drawControl: ct in: c dark: dark];
+	if (editing) { CGRect r = [ct frame]; CGPoint b = CGPointMake(r.origin.x + 8, r.origin.y + 8); CCFillDisc(c, b, 19, dark ? 66 : 120); CCFillGrey(c, 255, 1); CGContextSetLineWidth(c, 1.4); CCGlyph(c, @"minus", b, 14); }
+	return CCEndBitmap(c);
+}
+- (void)syncTiles:(BOOL)fade
+{
+	NSArray<CCControl *> *cs = [CCLayout shared].controls; BOOL same = cs.count == tileOwners.count;
+	for (NSUInteger i = 0; same && i < cs.count; i++) if (tileOwners[i] != cs[i]) same = NO;
+	[CATransaction begin]; [CATransaction setDisableActions: YES];
+	if (!same) { for (CALayer *l in tiles) [l removeFromSuperlayer]; tiles = [NSMutableArray array]; tileOwners = [NSMutableArray array]; hovered = nil; }
+	for (NSUInteger i = 0; i < cs.count; i++) {
+		CCControl *ct = cs[i]; CALayer *l; if (same) l = tiles[i]; else { l = [CALayer layer]; l.contentsGravity = kCAGravityResize; [tileLayer addSublayer: l]; [tiles addObject: l]; [tileOwners addObject: ct]; }
+		l.frame = [self tileFrame: ct]; CGImageRef img = [self newTileImage: ct];
+		if (fade && same) { CATransition *t = [CATransition animation]; t.type = kCATransitionFade; t.duration = 0.15; t.timingFunction = [CAMediaTimingFunction functionWithName: kCAMediaTimingFunctionEaseInEaseOut]; [l addAnimation: t forKey: @"contents-fade"]; }
+		l.contents = (__bridge id)img; CGImageRelease(img);
+	}
+	[CATransaction commit];
+}
+- (void)applyFading:(BOOL)fade
+{
+	if (!win) return;
+	CGImageRef img = [self newImage]; CCSetBandedContentsFade(baseLayer, img, 32, fade); CGImageRelease(img);
+	tileLayer.hidden = hasPage; if (!hasPage) [self syncTiles: fade];
+	[CATransaction flush]; [gallery redraw];
+}
+/* a tile's scale on a spring from where it is now: the real ControlCenter's pointer feedback is spring(0.2, 1.0) and spring(0.25, 0.75) (80 and 50 calls while the pointer moved over the open panel; which is the press and which the hover is a GUESS) */
+- (void)scaleTile:(CCControl *)ct to:(CGFloat)s response:(double)r damping:(double)z
+{
+	NSUInteger i = ct ? [tileOwners indexOfObjectIdenticalTo: ct] : NSNotFound; if (i == NSNotFound) return; CALayer *l = tiles[i];
+	CATransform3D now = l.presentationLayer ? ((CALayer *)l.presentationLayer).transform : l.transform, to = CATransform3DMakeScale(s, s, 1);
+	CASpringAnimation *a = CCSwiftUISpring(@"transform", r, z); a.fromValue = [NSValue valueWithCATransform3D: now]; a.toValue = [NSValue valueWithCATransform3D: to];
+	[CATransaction begin]; [CATransaction setDisableActions: YES]; l.transform = to; [CATransaction commit]; [l addAnimation: a forKey: @"scale"]; [CATransaction flush];
+}
+- (void)hoverAt:(CGPoint)p
+{
+	if (!win || hasPage || editing) return;
+	CCControl *ct = CGRectContainsPoint([self panelRect], p) ? [[CCLayout shared] controlAtPoint: p] : nil; if (ct == hovered || pressed) return;
+	[self scaleTile: hovered to: 1 response: 0.25 damping: 0.75]; hovered = ct; [self scaleTile: ct to: 1.02 response: 0.25 damping: 0.75];
+}
+- (void)redrawFading { [self applyFading: YES]; }
+- (void)redraw { [self applyFading: NO]; }
 
 /* ---- window ---- */
 /* The real ControlCenter animates with SwiftUI springs; the constants of its code (22 Animation.spring call sites, REA: docs/development/CONTROLCENTER-ANIMATIONS.md): (response, damping) = (0.4867, 1.0) x7, (0.5, 1.0) x5, (0.5, 0.85) x5,
@@ -141,7 +182,8 @@ static CGRect editPill(CGRect panel) { return CGRectMake(1074, CGRectGetMaxY(pan
 	win = [[DockWindow alloc] initWithFrame: kWindow level: 22 options: 0x10000];
 	if (!win) { NSLog(@"cc: panel window not created"); return; }
 	layer = [CALayer layer]; layer.frame = CGRectMake(0, 0, kWindow.size.width, kWindow.size.height);
-	CGImageRef img = [self newImage]; CCSetBandedContents(layer, img, 32); CGImageRelease(img);
+	baseLayer = [CALayer layer]; baseLayer.frame = layer.bounds; tileLayer = [CALayer layer]; tileLayer.frame = layer.bounds; [layer addSublayer: baseLayer]; [layer addSublayer: tileLayer]; tiles = nil; tileOwners = nil; hovered = nil;
+	[self applyFading: NO];
 	[win setRootLayer: layer];
 	if (cc->SetWindowClientPerceivedType) cc->SetWindowClientPerceivedType(sl->MainConnectionID(), win.windowID, 5);
 	CCShowWindow(win, 22);
@@ -201,7 +243,7 @@ static CGRect editPill(CGRect panel) { return CGRectMake(1074, CGRectGetMaxY(pan
 	}
 	if (CGRectContainsPoint(editPill([self panelRect]), p)) { [self setEditing: YES]; return YES; }
 	CCControl *s = [self sliderAt: p]; if (s && p.y > [s frame].origin.y + 28) { dragSlider = s; [self setSlider: s atX: p.x]; return YES; }
-	pressed = ct; pressPoint = p; return YES;
+	pressed = ct; pressPoint = p; [self scaleTile: ct to: 0.97 response: 0.2 damping: 1.0]; return YES;
 }
 - (BOOL)mouseDragged:(CGPoint)p
 {
@@ -215,6 +257,7 @@ static CGRect editPill(CGRect panel) { return CGRectMake(1074, CGRectGetMaxY(pan
 	if (!win) return NO;
 	if (dragSlider) { dragSlider = nil; return YES; }
 	CCControl *ct = pressed; pressed = nil; if (!ct) return NO;
+	[self scaleTile: ct to: (hovered == ct ? 1.02 : 1) response: 0.25 damping: 0.75];
 	if (editing) {                                                                       /* drag a control to another cell */
 		if (moved) {                                                                    /* the control's top-left follows the pointer; the cell under its centre is the target */
 			CGRect f = [ct frame]; int col = (int)floor((f.origin.x + (p.x - pressPoint.x) - 974 + 31) / 76.33), row = (int)floor((f.origin.y + (p.y - pressPoint.y) - 42 + 31) / 76);
