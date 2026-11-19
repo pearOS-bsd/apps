@@ -79,12 +79,12 @@ static NSString *symbolFor(NSString *n)
 		@"camera": @"camera.viewfinder", @"play": @"play.fill", @"pause": @"pause.fill", @"forward": @"forward.fill", @"rewind": @"backward.fill", @"sun.min": @"sun.min", @"sun.max": @"sun.max", @"speaker": @"speaker.fill",
 		@"speaker.wave": @"speaker.wave.3.fill", @"airplay": @"airplay.audio", @"dark": @"circle.lefthalf.filled", @"alarm": @"alarm", @"stopwatch": @"stopwatch", @"timer": @"timer", @"clock": @"clock", @"lightbulb": @"lightbulb.fill",
 		@"waveform": @"waveform", @"note": @"note.text", @"shazam": @"shazam.logo.fill", @"screensaver": @"play.display", @"shortcut": @"square.2.layers.3d", @"tile": @"rectangle.lefthalf.inset.filled", @"person": @"person.crop.circle",
-		@"lock": @"lock.fill", @"keyboard": @"keyboard", @"battery": @"battery.100", @"plus": @"plus", @"truetone": @"truetone", @"nightshift": @"nightshift", @"display": @"display", @"resize": @"arrow.up.left.and.arrow.down.right", @"minus": @"minus", @"magnifier": @"magnifyingglass" };
+		@"lock": @"lock.fill", @"keyboard": @"keyboard", @"battery": @"battery.100", @"plus": @"plus", @"zoom": @"plus.magnifyingglass", @"truetone": @"truetone", @"nightshift": @"nightshift", @"display": @"display", @"resize": @"arrow.up.left.and.arrow.down.right", @"minus": @"minus", @"magnifier": @"magnifyingglass" };
 	return m[n];
 }
 void CCGlyph(CGContextRef c, NSString *n, CGPoint o, CGFloat size)
 {
-	if (!getenv("CC_NO_SYMBOLS")) { NSString *s = symbolFor(n); CGImageRef img = s ? (sInkRGB ? CCSymbolImageRGB(s, size * 0.85, sInkR, sInkG, sInkB, sInkA) : CCSymbolImage(s, size * 0.85, inkOf(sInk), sInkA)) : NULL;
+	if (!getenv("CC_NO_SYMBOLS")) { NSString *s = symbolFor(n) ?: ([n rangeOfString: @"."].location != NSNotFound ? n : nil); CGImageRef img = s ? (sInkRGB ? CCSymbolImageRGB(s, size * 0.85, sInkR, sInkG, sInkB, sInkA) : CCSymbolImage(s, size * 0.85, inkOf(sInk), sInkA)) : NULL;
 		if (img) { CGFloat w = CGImageGetWidth(img) / 2.0, h = CGImageGetHeight(img) / 2.0; CGContextSaveGState(c); CGContextTranslateCTM(c, o.x, o.y); CGContextScaleCTM(c, 1, -1); CGContextDrawImage(c, CGRectMake(-w / 2, -h / 2, w, h), img); CGContextRestoreGState(c); return; } }
 	CGFloat u = size / 24.0; CGContextSaveGState(c); CGContextTranslateCTM(c, o.x, o.y); CGContextScaleCTM(c, u, u); CGContextSetLineWidth(c, 1.7);
 	if ([n hasPrefix: @"wifi"] || [n isEqual: @"airdrop"]) {

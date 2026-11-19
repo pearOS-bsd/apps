@@ -8,6 +8,9 @@
 - (void)redraw;
 - (BOOL)containsScreenPoint:(CGPoint)p;
 - (BOOL)mouseDown:(CGPoint)p;
+- (BOOL)mouseDragged:(CGPoint)p;
+- (BOOL)mouseUp:(CGPoint)p;                     /* a drag of a control from the gallery ends: dropped on the panel or not */
+- (BOOL)isDragging;
 - (void)scrollBy:(double)dy;
 - (void)typeText:(NSString *)s;                 /* search field; "\b" deletes */
 @end

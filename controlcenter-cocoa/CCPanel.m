@@ -135,7 +135,7 @@ static const CGFloat kTilePad = 4;
 - (CGRect)tileFrame:(CCControl *)ct { CGRect f = CGRectInset([ct frame], -kTilePad, -kTilePad); return CGRectMake(f.origin.x - kWindow.origin.x, kWindow.size.height - (f.origin.y - kWindow.origin.y) - f.size.height, f.size.width, f.size.height); }
 - (NSString *)tileSignature:(CCControl *)c dark:(BOOL)dark
 {
-	NSMutableString *s = [NSMutableString stringWithFormat: @"%d|%d|%d|%d|%d|%@", dark, editing, c.kind, CCIsOn(c.kind), c.cw * 10 + c.ch, CCStateText(c.kind) ?: @""];
+	NSMutableString *s = [NSMutableString stringWithFormat: @"%d|%d|%d|%d|%d|%@|%d", dark, editing, c.kind, CCIsOn(c.kind), c.cw * 10 + c.ch, CCStateText(c.kind) ?: @"", editing && (hovered == c || resizing == c)];
 	if (c.kind == CCDisplay || c.kind == CCSound || c.kind == CCKeyboardBrightness) [s appendFormat: @"|%.3f", CCSliderGet(c.kind)];
 	if (c.kind == CCNowPlaying) [s appendFormat: @"|%@|%@|%d", CCNowPlayingTitle() ?: @"", CCNowPlayingArtist() ?: @"", CCNowPlayingIsPlaying()];
 	return s;
@@ -146,7 +146,7 @@ static const CGFloat kTilePad = 4;
 	CGRect f = CGRectInset([ct frame], -kTilePad, -kTilePad);
 	CGContextRef c = CCBeginBitmap(f.size, f.origin); [self drawControl: ct in: c dark: dark];
 	if (editing) { CGRect r = [ct frame]; CGPoint b = CGPointMake(r.origin.x + 8, r.origin.y + 8); CCFillDisc(c, b, 19, dark ? 66 : 120); CCFillGrey(c, 255, 1); CGContextSetLineWidth(c, 1.4); CCGlyph(c, @"minus", b, 14);
-		int n; CCSizesFor(ct.kind, &n); if (n > 1) { CGPoint h = CGPointMake(CGRectGetMaxX(r) - 10, CGRectGetMaxY(r) - 10); CCFillDisc(c, h, 19, dark ? 66 : 120); CCFillGrey(c, 255, 1); CCGlyph(c, @"resize", h, 12); } }
+		int n; CCSizesFor(ct.kind, &n); if (n > 1 && (hovered == ct || resizing == ct)) { CGPoint h = CGPointMake(CGRectGetMaxX(r) - 10, CGRectGetMaxY(r) - 10); CCFillDisc(c, h, 19, dark ? 66 : 120); CCFillGrey(c, 255, 1); CCGlyph(c, @"resize", h, 12); } }
 	return CCEndBitmap(c);
 }
 /* The tiles are drawn one per run-loop turn after the panel is shown (a slow or blocking control does not hold the whole panel back); a newer redraw cancels the older one */
@@ -227,7 +227,8 @@ static const CGFloat kTilePad = 4;
 }
 - (void)hoverAt:(CGPoint)p
 {
-	if (!win || hasPage || editing) return;
+	if (!win || hasPage) return;
+	if (editing) { CCControl *ct = CGRectContainsPoint([self panelRect], p) ? [[CCLayout shared] controlAtPoint: p] : nil; if (ct != hovered && !pressed && !resizing) { hovered = ct; [self redraw]; } return; }       /* the resize handle shows on the tile under the pointer */
 	CCControl *ct = CGRectContainsPoint([self panelRect], p) ? [[CCLayout shared] controlAtPoint: p] : nil; if (ct == hovered || pressed) return;
 	[self scaleTile: hovered to: 1 response: 0.25 damping: 0.75]; hovered = ct; [self scaleTile: ct to: 1.02 response: 0.25 damping: 0.75];
 }
@@ -321,6 +322,12 @@ static const CGFloat kTilePad = 4;
 - (void)scrollGallery:(double)dy { [gallery scrollBy: dy]; }
 - (void)typeInGallery:(NSString *)s { [gallery typeText: s]; }
 - (BOOL)addControl:(CCKind)k { BOOL ok = [[CCLayout shared] add: k]; [self relayout]; return ok; }
+- (BOOL)addControl:(CCKind)k atScreenPoint:(CGPoint)p
+{
+	if (!CGRectContainsPoint([self panelRect], p)) return NO;
+	int col = (int)floor((p.x - 974 - CCDX()) / 76.33), row = (int)floor((p.y - 42) / 76); col = MAX(0, MIN(3, col)); row = MAX(0, row);
+	BOOL ok = [[CCLayout shared] add: k atCol: col row: row]; [self relayout]; return ok;
+}
 
 /* ---- mouse ---- */
 - (CCControl *)sliderAt:(CGPoint)p { CCControl *c = [[CCLayout shared] controlAtPoint: p]; if (!c) return nil; return (c.kind == CCDisplay || c.kind == CCSound || c.kind == CCKeyboardBrightness) ? c : nil; }
@@ -353,6 +360,7 @@ static const CGFloat kTilePad = 4;
 - (BOOL)mouseDragged:(CGPoint)p
 {
 	if (!win) return NO;
+	if ([gallery isDragging]) return [gallery mouseDragged: p];
 	if (dragSlider) { [self setSlider: dragSlider atX: p.x]; return YES; }
 	if (resizing) {                                                                      /* the handle follows the pointer: the nearest size the control offers that fits */
 		CGRect r = [resizing frame]; double wc = (p.x + 10 - r.origin.x) / 76.33, hc = (p.y + 10 - r.origin.y) / 76; int n; const CCSize *s = CCSizesFor(resizing.kind, &n), *best = NULL; double bd = 1e9;
@@ -366,6 +374,7 @@ static const CGFloat kTilePad = 4;
 - (BOOL)mouseUp:(CGPoint)p
 {
 	if (!win) return NO;
+	if ([gallery isDragging]) return [gallery mouseUp: p];
 	if (dragSlider) { dragSlider = nil; return YES; }
 	if (resizing) { resizing = nil; [[CCLayout shared] commit]; return YES; }
 	CCControl *ct = pressed; pressed = nil; if (!ct) return NO;

@@ -24,3 +24,9 @@ CGPathRef CGPathCreateWithRoundedRect(CGRect rect, CGFloat cornerWidth, CGFloat 
 CGColorSpaceRef CGColorSpaceCreateWithName(CFStringRef name);
 #include <sys/types.h>
 int posix_spawn(pid_t *pid, const char *path, const void *file_actions, const void *attrp, char *const argv[], char *const envp[]);
+
+/* gradients (the open CoreGraphics headers lack them) */
+typedef struct CGGradient *CGGradientRef;
+CGGradientRef CGGradientCreateWithColorComponents(CGColorSpaceRef space, const CGFloat *components, const CGFloat *locations, size_t count);
+void CGContextDrawLinearGradient(CGContextRef c, CGGradientRef gradient, CGPoint start, CGPoint end, uint32_t options);
+void CGGradientRelease(CGGradientRef gradient);

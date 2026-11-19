@@ -14,21 +14,21 @@ static const CCCatalogEntry kCatalog[] = {
 	{ CCNowPlaying, "nowplaying", "Now Playing", "Now Playing", "play", 2, 2, 1 }, { CCStageManager, "stage", "Stage Manager", "Desktop & Finder", "stage", 1, 1, 2 },
 	{ CCScreenMirroring, "mirror", "Screen Mirroring", "Display & Brightness", "mirror", 1, 1, 3 }, { CCDarkMode, "dark", "Dark Mode", "Display & Brightness", "dark", 1, 1, 3 },
 	{ CCScreenshot, "screenshot", "Screenshot", "Screenshot", "camera", 1, 1, 4 }, { CCFocus, "focus", "Focus", "Focus", "moon", 2, 1, 5 },
-	{ CCDisplay, "display", "Display", "Display & Brightness", "sun.max", 4, 1, 3 }, { CCSound, "sound", "Sound", "Sound", "speaker.wave", 4, 1, 6 },
+	{ CCDisplay, "display", "Display", "Display & Brightness", "sun.max", 4, 1, 3 }, { CCSound, "sound", "Sound", "Sounds", "speaker.wave", 4, 1, 6 },
 	{ CCAlarm, "alarm", "Alarm", "Clock", "alarm", 1, 1, 7 }, { CCStopwatch, "stopwatch", "Stopwatch", "Clock", "stopwatch", 1, 1, 7 }, { CCTimer, "timer", "Timer", "Clock", "timer", 1, 1, 7 },
 	{ CCScene, "scene", "Scene or Accessory", "Home", "lightbulb", 2, 2, 8 }, { CCTileWindows, "tile", "Tile Windows Left & Right", "Desktop & Finder", "tile", 2, 1, 2 },
 	{ CCRunShortcut, "shortcut", "Run Shortcut", "Shortcuts", "shortcut", 2, 1, 9 }, { CCVoiceMemo, "voicememo", "Voice Memo", "Voice Memos", "waveform", 1, 1, 10 },
-	{ CCQuickNote, "quicknote", "Quick Note", "Notes", "note", 1, 1, 11 }, { CCRecognizeMusic, "shazam", "Recognize Music", "Music Recognition", "shazam", 2, 1, 12 },
-	{ CCScreenSaver, "screensaver", "Start Screen Saver", "Lock Screen", "screensaver", 2, 2, 13 }, { CCKeyboardBrightness, "kbdbright", "Keyboard Brightness", "Display & Brightness", "keyboard", 4, 1, 3 },
+	{ CCQuickNote, "quicknote", "Quick Note", "Notes", "note", 1, 1, 11 }, { CCRecognizeMusic, "shazam", "Recognize Music", "Utilities", "shazam", 2, 1, 12 },
+	{ CCScreenSaver, "screensaver", "Start Screen Saver", "Lock Screen", "screensaver", 2, 2, 13 }, { CCKeyboardBrightness, "kbdbright", "Keyboard Brightness", "Keyboards", "keyboard", 4, 1, 3 },
 	{ CCLockScreen, "lockscreen", "Lock Screen", "Lock Screen", "lock", 1, 1, 13 }, { CCFastUserSwitching, "fus", "Fast User Switching", "Fast User Switching", "person", 1, 1, 14 },
 	{ CCBattery, "battery", "Battery", "Battery", "battery", 2, 1, 15 }, { CCClockMenu, "clock", "Clock", "Clock", "clock", 1, 1, 7 },
-	{ CCTrueTone, "truetone", "True Tone", "Display & Brightness", "truetone", 1, 1, 3 }, { CCNightShift, "nightshift", "Night Shift", "Display & Brightness", "nightshift", 1, 1, 3 },
+	{ CCZoom, "zoom", "Zoom", "Zoom", "zoom", 2, 2, 3 }, { CCTrueTone, "truetone", "True Tone", "Display & Brightness", "truetone", 1, 1, 3 }, { CCNightShift, "nightshift", "Night Shift", "Display & Brightness", "nightshift", 1, 1, 3 },
 };
 const CCCatalogEntry *CCCatalog(size_t *n) { if (n) *n = sizeof kCatalog / sizeof *kCatalog; return kCatalog; }
 const CCCatalogEntry *CCCatalogFor(CCKind k) { for (size_t i = 0; i < sizeof kCatalog / sizeof *kCatalog; i++) if (kCatalog[i].kind == k) return &kCatalog[i]; return NULL; }
 NSArray<NSString *> *CCCategories(void)
 {
-	return @[ @"All Controls", @"Clock", @"Connectivity", @"Desktop & Finder", @"Display & Brightness", @"Fast User Switching", @"Focus", @"Home", @"Lock Screen", @"Notes", @"Now Playing", @"Screenshot", @"Shortcuts", @"Sound", @"Battery", @"Music Recognition", @"Voice Memos" ];
+	return @[ @"All Controls", @"Battery", @"Clock", @"Connectivity", @"Desktop & Finder", @"Display & Brightness", @"Fast User Switching", @"Focus", @"Home", @"Keyboards", @"Lock Screen", @"Notes", @"Now Playing", @"Screenshot", @"Shortcuts", @"Sounds", @"Utilities", @"Voice Memos", @"Zoom" ];
 }
 
 /* ---- grid: 4 columns, pitch measured on the real panel (x 974 1050 1127 1203, rows every 76, cell 63) ---- */
@@ -44,7 +44,7 @@ const CCSize *CCSizesFor(CCKind k, int *n)
 	case CCSound: case CCKeyboardBrightness: *n = 2; return slider;
 	case CCScreenSaver: *n = 3; return square;
 	case CCScene: *n = 2; return scene;
-	case CCNowPlaying: *n = 1; return fixed;
+	case CCNowPlaying: case CCZoom: *n = 1; return fixed;
 	default: *n = 2; return toggle;
 	}
 }
@@ -99,6 +99,12 @@ CGRect CCCellRect(int col, int row, int w, int h) { return CGRectMake(round(kX0 
 	if (col < 0 || row < 0 || col + w > 4 || row + h > CCMaxRows()) return NO;
 	for (CCControl *c in _controls) { if (c == ig) continue; if (col < c.col + [c cw] && c.col < col + w && row < c.row + [c ch] && c.row < row + h) return NO; }
 	return YES;
+}
+- (BOOL)add:(CCKind)k atCol:(int)col row:(int)row               /* dropped from the gallery on a cell: the catalog size if it fits there, else the largest size the control offers that does */
+{
+	const CCCatalogEntry *e = CCCatalogFor(k); if (!e || [self contains: k]) return NO; int n; const CCSize *s = CCSizesFor(k, &n); int w = e->w, h = e->h; BOOL ok = [self fits: col row: row w: w h: h ignoring: nil];
+	for (int i = n - 1; !ok && i >= 0; i--) if ([self fits: col row: row w: s[i].w h: s[i].h ignoring: nil]) { w = s[i].w; h = s[i].h; ok = YES; }
+	if (!ok) return NO; CCControl *c = [CCControl new]; c.kind = k; c.col = col; c.row = row; c.w = (w == e->w && h == e->h) ? 0 : w; c.h = (w == e->w && h == e->h) ? 0 : h; [_controls addObject: c]; [self save]; return YES;
 }
 - (BOOL)add:(CCKind)k
 {

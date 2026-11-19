@@ -4,7 +4,7 @@
 typedef NS_ENUM(int, CCKind) {
 	CCWifi, CCBluetooth, CCAirDrop, CCNowPlaying, CCStageManager, CCScreenMirroring, CCDarkMode, CCScreenshot, CCFocus, CCDisplay, CCSound,       /* the default panel */
 	CCAlarm, CCStopwatch, CCTimer, CCScene, CCTileWindows, CCRunShortcut, CCVoiceMemo, CCQuickNote, CCRecognizeMusic, CCScreenSaver, CCKeyboardBrightness, CCLockScreen,
-	CCFastUserSwitching, CCBattery, CCClockMenu, CCTrueTone, CCNightShift, CCKindCount
+	CCFastUserSwitching, CCBattery, CCClockMenu, CCTrueTone, CCNightShift, CCZoom, CCKindCount
 };
 typedef struct { CCKind kind; const char *id, *title, *category, *glyph; int w, h; int icon; } CCCatalogEntry;   /* icon = sidebar/gallery colour index */
 const CCCatalogEntry *CCCatalog(size_t *count);
@@ -25,6 +25,7 @@ extern NSArray<NSString *> *CCCategories(void);
 - (void)load; - (void)save;
 - (int)rows;                             /* rows in use (max row + 1) */
 - (CCControl *)controlAtPoint:(CGPoint)p;
+- (BOOL)add:(CCKind)k atCol:(int)col row:(int)row;      /* a control dropped on a cell */
 - (BOOL)add:(CCKind)k;                   /* first free place; NO when the grid is full or the kind is already there */
 - (void)remove:(CCControl *)c;
 - (BOOL)contains:(CCKind)k;
