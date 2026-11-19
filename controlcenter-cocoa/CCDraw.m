@@ -35,7 +35,10 @@ CGContextRef CCBeginBitmap(CGSize size, CGPoint origin)
 	return c;
 }
 CGImageRef CCEndBitmap(CGContextRef c) { CGImageRef i = CGBitmapContextCreateImage(c); CGContextRelease(c); return i; }
-static CGFloat sInk = 255, sInkA = 1;            /* the last colour set: SF symbols are drawn tinted with it */
+static CGFloat sInk = 255, sInkA = 1;
+static BOOL sDarkInk;            /* the light appearance over glass: white ink becomes dark, as the labels of the real panel (vibrancy) */
+void CCSetDarkInk(BOOL on) { sDarkInk = on; }
+static CGFloat inkOf(CGFloat v) { return sDarkInk && v >= 200 ? 28 : v; }            /* the last colour set: SF symbols are drawn tinted with it */
 void CCFillGrey(CGContextRef c, CGFloat v, CGFloat a)
 {
 	sInk = v; sInkA = a;
@@ -62,7 +65,7 @@ static CTLineRef line(NSString *s, CGFloat size, BOOL bold, CGFloat grey)
 double CCTextWidth(NSString *s, CGFloat size, BOOL bold) { CTLineRef l = line(s, size, bold, 0); double w = CTLineGetTypographicBounds(l, NULL, NULL, NULL); CFRelease(l); return w; }
 void CCText(CGContextRef c, NSString *s, CGFloat x, CGFloat baseline, CGFloat size, BOOL bold, CGFloat grey, CGFloat align)
 {
-	CTLineRef l = line(s, size, bold, grey); double w = CTLineGetTypographicBounds(l, NULL, NULL, NULL);
+	CTLineRef l = line(s, size, bold, inkOf(grey)); double w = CTLineGetTypographicBounds(l, NULL, NULL, NULL);
 	CGContextSaveGState(c); CGContextSetTextMatrix(c, CGAffineTransformMakeScale(1, -1)); CGContextSetTextPosition(c, x - w * align, baseline); CTLineDraw(l, c); CGContextRestoreGState(c); CFRelease(l);
 }
 
@@ -81,7 +84,7 @@ static NSString *symbolFor(NSString *n)
 }
 void CCGlyph(CGContextRef c, NSString *n, CGPoint o, CGFloat size)
 {
-	if (!getenv("CC_NO_SYMBOLS")) { NSString *s = symbolFor(n); CGImageRef img = s ? CCSymbolImage(s, size * 0.85, sInk, sInkA) : NULL;
+	if (!getenv("CC_NO_SYMBOLS")) { NSString *s = symbolFor(n); CGImageRef img = s ? CCSymbolImage(s, size * 0.85, inkOf(sInk), sInkA) : NULL;
 		if (img) { CGFloat w = CGImageGetWidth(img) / 2.0, h = CGImageGetHeight(img) / 2.0; CGContextSaveGState(c); CGContextTranslateCTM(c, o.x, o.y); CGContextScaleCTM(c, 1, -1); CGContextDrawImage(c, CGRectMake(-w / 2, -h / 2, w, h), img); CGContextRestoreGState(c); return; } }
 	CGFloat u = size / 24.0; CGContextSaveGState(c); CGContextTranslateCTM(c, o.x, o.y); CGContextScaleCTM(c, u, u); CGContextSetLineWidth(c, 1.7);
 	if ([n hasPrefix: @"wifi"] || [n isEqual: @"airdrop"]) {

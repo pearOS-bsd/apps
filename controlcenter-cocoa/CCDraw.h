@@ -33,3 +33,4 @@ CGFloat CCDX(void);
 /* Liquid Glass look (macOS 26): the panel and the tiles are translucent and the window server blurs what is behind the window (SLSSetWindowBackgroundBlurRadius, as the menus and NSVisualEffectView do).  CC_GLASS=0 gives the opaque greys measured on a Mac VM without a GPU. */
 BOOL CCGlassMode(void);
 void CCFillRRectA(CGContextRef c, CGRect r, CGFloat radius, CGFloat grey, CGFloat alpha);
+void CCSetDarkInk(BOOL on);                                    /* white labels and glyphs are drawn dark (the light appearance over glass) */

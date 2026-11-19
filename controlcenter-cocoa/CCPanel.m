@@ -46,7 +46,7 @@ static void ccTrace(const char *s)
 	const CCCatalogEntry *e = [ct entry]; CGRect r = [ct frame]; CGPoint ctr = CGPointMake(CGRectGetMidX(r), CGRectGetMidY(r));
 	BOOL on = CCIsOn(ct.kind), disc1 = e->w == 1 && e->h == 1; CGFloat radius = (e->h == 1 && e->w <= 2) ? 31.5 : 24;
 	BOOL whiteTile = disc1 && on;                                                 /* a switched-on one-cell toggle is a white disc with a dark glyph (the Dark Mode button of the real panel) */
-	if (CCGlassMode() && !whiteTile) CCFillRRectA(c, r, radius, dark ? 150 : 120, 0.10); else CCFillRRect(c, r, radius, whiteTile ? 255 : (dark ? 111 : 109));
+	if (CCGlassMode() && !whiteTile) CCFillRRectA(c, r, radius, dark ? 150 : 120, 0.03); else CCFillRRect(c, r, radius, whiteTile ? 255 : (dark ? 111 : 109));
 	CGFloat ink = whiteTile ? 0 : 255; CCFillGrey(c, ink, 1); CGContextSetLineWidth(c, 1.6);
 	switch (ct.kind) {
 	case CCDisplay: case CCSound: case CCKeyboardBrightness: {
@@ -104,10 +104,10 @@ static void ccTrace(const char *s)
 /* The panel is a base (the rounded background, the empty slots of edit mode, the "Edit Controls" pill, or a page) and one small layer per control, so that a control can be animated on its own (hover and press springs, like the real SwiftUI tiles). */
 - (CGImageRef)newImage
 {
-	BOOL dark = CCDarkTheme(); CGRect panel = [self panelRect];
+	BOOL dark = CCDarkTheme(); CCSetDarkInk(CCGlassMode() && !dark); CGRect panel = [self panelRect];
 	CGContextRef c = CCBeginBitmap(kWindow.size, kWindow.origin);
 	if (hasPage) { [self drawPage: c in: panel dark: dark]; return CCEndBitmap(c); }
-	if (CCGlassMode()) CCFillRRectA(c, panel, 37, dark ? 40 : 235, 0.06); else CCFillRRect(c, panel, 37, dark ? (editing ? 58 : 61) : 219);
+	if (!CCGlassMode()) CCFillRRect(c, panel, 37, dark ? (editing ? 58 : 61) : 219);       /* with glass the panel has no body: the controls float */
 	CCLayout *lay = [CCLayout shared];
 	if (editing) {
 		int rows = MIN(lay.rows + 2, CCMaxRows());
@@ -124,6 +124,7 @@ static const CGFloat kTilePad = 4;
 - (CGRect)tileFrame:(CCControl *)ct { CGRect f = CGRectInset([ct frame], -kTilePad, -kTilePad); return CGRectMake(f.origin.x - kWindow.origin.x, kWindow.size.height - (f.origin.y - kWindow.origin.y) - f.size.height, f.size.width, f.size.height); }
 - (CGImageRef)newTileImage:(CCControl *)ct dark:(BOOL)dark
 {
+	CCSetDarkInk(CCGlassMode() && !dark);
 	CGRect f = CGRectInset([ct frame], -kTilePad, -kTilePad);
 	CGContextRef c = CCBeginBitmap(f.size, f.origin); [self drawControl: ct in: c dark: dark];
 	if (editing) { CGRect r = [ct frame]; CGPoint b = CGPointMake(r.origin.x + 8, r.origin.y + 8); CCFillDisc(c, b, 19, dark ? 66 : 120); CCFillGrey(c, 255, 1); CGContextSetLineWidth(c, 1.4); CCGlyph(c, @"minus", b, 14); }
@@ -208,8 +209,7 @@ static const CGFloat kTilePad = 4;
 - (void)addBackdrop
 {
 	glassLayer = [CALayer layer]; glassLayer.frame = layer.bounds; [layer addSublayer: glassLayer];
-	CGRect pr = [self panelRect]; CALayer *g = CCGlassLayer(CGRectMake(pr.origin.x - kWindow.origin.x, kWindow.size.height - (pr.origin.y - kWindow.origin.y) - pr.size.height, pr.size.width, pr.size.height), 37);
-	if (g) [glassLayer addSublayer: g];
+	/* the real panel has no glass of its own: the controls float on the wallpaper, each one a glass shape (Control Center of macOS 26) */
 }
 - (void)show
 {
