@@ -83,7 +83,10 @@ static CGSize tileSize(const CCCatalogEntry *e) { return CGSizeMake(e->w == 1 ? 
 	} else {
 		BOOL circle = e->kind == CCRecognizeMusic || e->kind == CCWifi || e->kind == CCBluetooth || e->kind == CCAirDrop || e->kind == CCFocus || e->kind == CCScreenMirroring;
 		CGPoint ic = CGPointMake(r.origin.x + 32, mid.y); if (circle) CCFillDisc(c, ic, 34, 90); CCFillGrey(c, 235, 1); CCGlyph(c, g, ic, circle ? 20 : 24);
-		CCFillGrey(c, 255, 1); CCText(c, labelOf(e), r.origin.x + 56, mid.y + 4.5, 13, YES, 255, 0);
+		CCFillGrey(c, 255, 1); NSString *lb = labelOf(e); CGFloat avail = r.size.width - 56 - 2;
+		NSRange sp = [lb rangeOfString: @" " options: NSBackwardsSearch];
+		if (CCTextWidth(lb, 13, YES) > avail && sp.location != NSNotFound) { CCText(c, [lb substringToIndex: sp.location], r.origin.x + 56, mid.y - 2, 13, YES, 255, 0); CCText(c, [lb substringFromIndex: sp.location + 1], r.origin.x + 56, mid.y + 13, 13, YES, 255, 0); }      /* a long label wraps as in the real one ("Recognize" / "Music") */
+		else CCText(c, lb, r.origin.x + 56, mid.y + 4.5, 13, YES, 255, 0);
 	}
 	CCFillGrey(c, 235, 1); CCText(c, l1, CGRectGetMidX(r), CGRectGetMaxY(r) + 16, 12, NO, 235, 0.5); if (l2) CCText(c, l2, CGRectGetMidX(r), CGRectGetMaxY(r) + 30, 12, NO, 235, 0.5);
 }
