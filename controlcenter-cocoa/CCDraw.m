@@ -79,7 +79,7 @@ static NSString *symbolFor(NSString *n)
 		@"camera": @"camera.viewfinder", @"play": @"play.fill", @"pause": @"pause.fill", @"forward": @"forward.fill", @"rewind": @"backward.fill", @"sun.min": @"sun.min", @"sun.max": @"sun.max", @"speaker": @"speaker.fill",
 		@"speaker.wave": @"speaker.wave.3.fill", @"airplay": @"airplay.audio", @"dark": @"circle.lefthalf.filled", @"alarm": @"alarm", @"stopwatch": @"stopwatch", @"timer": @"timer", @"clock": @"clock", @"lightbulb": @"lightbulb.fill",
 		@"waveform": @"waveform", @"note": @"note.text", @"shazam": @"shazam.logo.fill", @"screensaver": @"play.display", @"shortcut": @"square.2.layers.3d", @"tile": @"rectangle.lefthalf.inset.filled", @"person": @"person.crop.circle",
-		@"lock": @"lock.fill", @"keyboard": @"keyboard", @"battery": @"battery.100", @"plus": @"plus", @"resize": @"arrow.up.left.and.arrow.down.right", @"minus": @"minus", @"magnifier": @"magnifyingglass" };
+		@"lock": @"lock.fill", @"keyboard": @"keyboard", @"battery": @"battery.100", @"plus": @"plus", @"truetone": @"truetone", @"nightshift": @"nightshift", @"display": @"display", @"resize": @"arrow.up.left.and.arrow.down.right", @"minus": @"minus", @"magnifier": @"magnifyingglass" };
 	return m[n];
 }
 void CCGlyph(CGContextRef c, NSString *n, CGPoint o, CGFloat size)

@@ -4,7 +4,7 @@
 typedef NS_ENUM(int, CCKind) {
 	CCWifi, CCBluetooth, CCAirDrop, CCNowPlaying, CCStageManager, CCScreenMirroring, CCDarkMode, CCScreenshot, CCFocus, CCDisplay, CCSound,       /* the default panel */
 	CCAlarm, CCStopwatch, CCTimer, CCScene, CCTileWindows, CCRunShortcut, CCVoiceMemo, CCQuickNote, CCRecognizeMusic, CCScreenSaver, CCKeyboardBrightness, CCLockScreen,
-	CCFastUserSwitching, CCBattery, CCClockMenu, CCKindCount
+	CCFastUserSwitching, CCBattery, CCClockMenu, CCTrueTone, CCNightShift, CCKindCount
 };
 typedef struct { CCKind kind; const char *id, *title, *category, *glyph; int w, h; int icon; } CCCatalogEntry;   /* icon = sidebar/gallery colour index */
 const CCCatalogEntry *CCCatalog(size_t *count);
@@ -12,7 +12,8 @@ const CCCatalogEntry *CCCatalogFor(CCKind k);
 extern NSArray<NSString *> *CCCategories(void);
 
 @interface CCControl : NSObject
-@property CCKind kind; @property int col, row; @property int w, h;      /* w, h: the size in cells the user chose in Edit Controls (0 = the catalog size) */
+@property CCKind kind; @property int col, row; @property int w, h;       /* w, h: the size in cells the user chose in Edit Controls (0 = the catalog size) */
+@property (copy) NSString *instanceId;                      /* the id of the instance in the real layout file (CCBento); nil for a control added here */
 - (const CCCatalogEntry *)entry;
 - (int)cw; - (int)ch;                    /* the size in cells now */
 - (CGRect)frame;                         /* screen rectangle in the panel */

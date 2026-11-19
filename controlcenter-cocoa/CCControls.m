@@ -6,6 +6,7 @@
 #import <crt_externs.h>
 #import "CCDraw.h"
 #import "CCPlatform.h"
+#import "CCBento.h"
 
 /* ---- catalog (the gallery of the real Edit Controls: categories and suggestions seen on 26.7.2; the sets inside a category are partly guessed) ---- */
 static const CCCatalogEntry kCatalog[] = {
@@ -21,6 +22,7 @@ static const CCCatalogEntry kCatalog[] = {
 	{ CCScreenSaver, "screensaver", "Start Screen Saver", "Lock Screen", "screensaver", 2, 2, 13 }, { CCKeyboardBrightness, "kbdbright", "Keyboard Brightness", "Display & Brightness", "keyboard", 4, 1, 3 },
 	{ CCLockScreen, "lockscreen", "Lock Screen", "Lock Screen", "lock", 1, 1, 13 }, { CCFastUserSwitching, "fus", "Fast User Switching", "Fast User Switching", "person", 1, 1, 14 },
 	{ CCBattery, "battery", "Battery", "Battery", "battery", 2, 1, 15 }, { CCClockMenu, "clock", "Clock", "Clock", "clock", 1, 1, 7 },
+	{ CCTrueTone, "truetone", "True Tone", "Display & Brightness", "truetone", 1, 1, 3 }, { CCNightShift, "nightshift", "Night Shift", "Display & Brightness", "nightshift", 1, 1, 3 },
 };
 const CCCatalogEntry *CCCatalog(size_t *n) { if (n) *n = sizeof kCatalog / sizeof *kCatalog; return kCatalog; }
 const CCCatalogEntry *CCCatalogFor(CCKind k) { for (size_t i = 0; i < sizeof kCatalog / sizeof *kCatalog; i++) if (kCatalog[i].kind == k) return &kCatalog[i]; return NULL; }
@@ -36,9 +38,10 @@ int CCMaxRows(void) { return 8; }
 /* the sizes of the controls in the real Edit Controls (the resize handle of a tile snaps between them): toggles are a round button or a pill, sliders half or full width, Now Playing and the big tiles a square */
 const CCSize *CCSizesFor(CCKind k, int *n)
 {
-	static const CCSize toggle[] = { {1,1}, {2,1} }, slider[] = { {2,1}, {4,1} }, square[] = { {1,1}, {2,1}, {2,2} }, fixed[] = { {2,2} }, scene[] = { {1,1}, {2,2} };
+	static const CCSize display[] = { {1,1}, {2,1}, {4,1} }, toggle[] = { {1,1}, {2,1} }, slider[] = { {2,1}, {4,1} }, square[] = { {1,1}, {2,1}, {2,2} }, fixed[] = { {2,2} }, scene[] = { {1,1}, {2,2} };
 	switch (k) {
-	case CCDisplay: case CCSound: case CCKeyboardBrightness: *n = 2; return slider;
+	case CCDisplay: *n = 3; return display;
+	case CCSound: case CCKeyboardBrightness: *n = 2; return slider;
 	case CCScreenSaver: *n = 3; return square;
 	case CCScene: *n = 2; return scene;
 	case CCNowPlaying: *n = 1; return fixed;
@@ -55,6 +58,7 @@ CGRect CCCellRect(int col, int row, int w, int h) { return CGRectMake(round(kX0 
 @end
 
 @implementation CCLayout
+{ CCBento *bento; }
 + (instancetype)shared { static CCLayout *l; if (!l) { l = [CCLayout new]; [l load]; } return l; }
 - (void)resetDefaults
 {
@@ -71,6 +75,8 @@ CGRect CCCellRect(int col, int row, int w, int h) { return CGRectMake(round(kX0 
 - (void)load
 {
 	[self resetDefaults];
+	CCBento *real = getenv("CC_LAYOUT") ? nil : [CCBento load];                    /* the layout of the real Control Center (CC_LAYOUT=real: the test layout below) */
+	if (real && real.controls.count) { bento = real; _controls = [real.controls mutableCopy]; return; }
 	CFPropertyListRef v = CFPreferencesCopyAppValue(CFSTR("pearos.CCLayout"), CFSTR("com.apple.controlcenter"));       /* our key in the real domain; the real layout is stored elsewhere (not found) */
 	if (v && CFGetTypeID(v) == CFArrayGetTypeID()) {
 		NSMutableArray *list = [NSMutableArray array];
@@ -81,6 +87,7 @@ CGRect CCCellRect(int col, int row, int w, int h) { return CGRectMake(round(kX0 
 }
 - (void)save
 {
+	if (bento) { [bento saveControls: _controls]; return; }
 	NSMutableArray *a = [NSMutableArray array]; for (CCControl *c in _controls) [a addObject: @{ @"k": @(c.kind), @"c": @(c.col), @"r": @(c.row), @"w": @(c.w), @"h": @(c.h) }];
 	CFPreferencesSetAppValue(CFSTR("pearos.CCLayout"), (__bridge CFArrayRef)a, CFSTR("com.apple.controlcenter")); CFPreferencesAppSynchronize(CFSTR("com.apple.controlcenter"));
 }

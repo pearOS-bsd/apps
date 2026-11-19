@@ -57,6 +57,7 @@ static void ccTrace(const char *s)
 	CGContextSetLineWidth(c, 1.6);
 	switch (ct.kind) {
 	case CCDisplay: case CCSound: case CCKeyboardBrightness: {
+		if (cw == 1) { CCFillGrey(c, 255, 1); CCGlyph(c, @"display", ctr, 22); break; }                         /* the small Display: a button with the display glyph */
 		BOOL wide = cw == 4, disp = ct.kind != CCSound; CGFloat x0, x1; CCSliderRange(ct, &x0, &x1);
 		CCText(c, (ct.kind == CCKeyboardBrightness && !wide) ? @"Keyboard" : [NSString stringWithUTF8String: e->title], r.origin.x + (wide ? 16 : 18), r.origin.y + (ct.kind == CCDisplay ? 23 : 22), 13, YES, 255, 0);
 		CGFloat y = r.origin.y + (ct.kind == CCDisplay ? 43 : 42);

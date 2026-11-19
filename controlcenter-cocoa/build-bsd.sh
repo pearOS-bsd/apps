@@ -19,7 +19,7 @@ for f in glob.glob(sys.argv[1] + "/*.h"):
 PY
 T="--target=x86_64-apple-macosx14.0 -DXNU_PLATFORM_MacOSX -nostdinc -isystem $RES -isystem $I"
 OBJC="$T -x objective-c -fobjc-runtime=macosx-14.0 -fobjc-arc -Wno-everything -Werror=implicit-function-declaration -Werror=int-conversion -O1 -isystem $OUT/ravyn -isystem $W/sdk/stubs -isystem $OUT/hdr -isystem $P/SDK/include -I$P/QuartzCore/include -I$H/compat -include $H/compat/CCCompat.h -I$H -I$H/../dock-cocoa"
-set +e; for f in CCGlass main CCServices CCStatusBar CCSkyLight CCSkyLightStartup CCPrefs CCPanel CCInput CCDraw CCSymbols CCControls CCGallery CCExtras ../dock-cocoa/DockWindow ../dock-cocoa/SkyLightAPI; do clang $OBJC -c "$H/$f.m" -o "$OUT/o/$(basename $f).o" 2>&1 | grep "error"; done; set -e
+set +e; for f in CCGlass main CCServices CCStatusBar CCSkyLight CCSkyLightStartup CCPrefs CCPanel CCInput CCDraw CCSymbols CCControls CCBento CCGallery CCExtras ../dock-cocoa/DockWindow ../dock-cocoa/SkyLightAPI; do clang $OBJC -c "$H/$f.m" -o "$OUT/o/$(basename $f).o" 2>&1 | grep "error"; done; set -e
 clang $T -std=gnu11 -Wno-everything -O1 -c "$H/CCPlatform.c" -o "$OUT/o/CCPlatform.o"
 # one empty-symbol stub for each framework the program links
 FW=""; for n in Foundation CoreFoundation CoreGraphics QuartzCore CoreServices CoreText ImageIO ApplicationServices IOKit; do
