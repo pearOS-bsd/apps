@@ -1,3 +1,4 @@
+#include <dlfcn.h>
 #import "CCPanel.h"
 #import "CCSkyLight.h"
 #import "CCDraw.h"
@@ -14,7 +15,14 @@ static const CGFloat kPanelY = 34, kPanelW = 308;
 
 static CGRect editPill(CGRect panel) { return CGRectMake(1074 + CCDX(), CGRectGetMaxY(panel) - 31, 93, 23); }          /* "Edit Controls": 502..525 in a panel ending at 533 */
 
-static void ccTrace(const char *s) { if (!getenv("CC_TRACE")) return; write(2, "cc-trace: ", 10); write(2, s, strlen(s)); write(2, "\n", 1); }
+/* CC_STAGES=1: each stage of show() sends a harmless request to the window server (a different getter at each stage), so that the log of the Mach bridge shows how far the program got when it waits for something that never comes (stderr is not visible on pearOS) */
+static void ccTrace(const char *s)
+{
+	static const char *stages[] = { "show: begin", "show: window", "show: layers", "show: applied", "show: root", "show: shown", "show: opened" };
+	if (!getenv("CC_STAGES")) return;
+	/* stage k = k + 2 calls of SLSGetAppearanceThemeLegacy straight (the cached CCDarkTheme would hide them): the count in the log of the bridge says the stage */
+	for (int k = 0; k < 7; k++) if (!strcmp(s, stages[k])) { static int (*f)(void); if (!f) f = dlsym(RTLD_DEFAULT, "SLSGetAppearanceThemeLegacy"); if (f) for (int n = 0; n < k + 2; n++) f(); }
+}
 @implementation CCPanel
 {
 	DockWindow *win; CALayer *layer, *baseLayer, *tileLayer; NSMutableArray<CALayer *> *tiles; NSMutableArray<CCControl *> *tileOwners; CCControl *hovered; NSUInteger tileGeneration; BOOL editing; CCGallery *gallery;

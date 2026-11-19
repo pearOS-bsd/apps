@@ -15,11 +15,7 @@ static const CGRect kBase[3] = { {1063, 0, 31, 30}, {1094, 0, 42, 30}, {1136, 0,
 #define kFrames ((CGRect[3]){ CGRectOffset(kBase[0], CCDX(), 0), CGRectOffset(kBase[1], CCDX(), 0), CGRectOffset(kBase[2], CCDX(), 0) })
 static const uint32_t kKeys[3] = { 0x7fffffd0, 0x7fffffe1, 0x7ffffff5 };       /* clock and Control Center: real values; Spotlight's guessed */
 
-static BOOL themeIsDark(void)
-{
-	static int (*get)(void); if (!get) { void *h = dlopen("/System/Library/PrivateFrameworks/SkyLight.framework/SkyLight", RTLD_LAZY); if (h) get = dlsym(h, "SLSGetAppearanceThemeLegacy"); }
-	return get ? get() != 0 : YES;
-}
+static BOOL themeIsDark(void) { return CCDarkTheme(); }       /* cached: every query is a round trip to the window server */
 static CGImageRef render(int item, CGSize s)
 {
 	CGColorSpaceRef cs = CGColorSpaceCreateDeviceRGB();

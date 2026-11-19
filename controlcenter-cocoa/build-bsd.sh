@@ -9,6 +9,14 @@ rm -rf "$OUT/ravyn"; mkdir -p "$OUT/o" "$OUT/hdr/IOKit/ps" "$OUT/hdr/CoreText" "
 cp "$P/IOKit/upstream/IOKitUser/ps.subproj"/*.h "$OUT/hdr/IOKit/ps/"; cp "$P/CoreText/upstream/ravynos-CoreText"/*.h "$OUT/hdr/CoreText/"
 # ravynOS' CoreGraphics headers say `typedef float CGFloat`; Apple's CGFloat is a double on 64 bits and that is what the real frameworks (and every struct they pass: CGPoint, CGRect) use: a copy of the tree with the right type
 cp -R "$W/sdk/ravyn" "$OUT/ravyn"; grep -rl "typedef float CGFloat;" "$OUT/ravyn" | while read f; do sed -i.bak "s/typedef float CGFloat;/typedef double CGFloat;/" "$f"; rm -f "$f.bak"; done
+# the same headers spell `float` in the prototypes of the drawing functions (CGContextSetRGBFillColor(c, float r, ...)): Apple's take CGFloat, and a call made with floats would pass garbage (everything drawn transparent)
+python3 - "$OUT/ravyn/CoreGraphics" <<'PY'
+import re, sys, glob
+for f in glob.glob(sys.argv[1] + "/*.h"):
+    s = open(f, errors="replace").read()
+    t = "\n".join(l if re.search(r"typedef (float|double) CGFloat;", l) else re.sub(r"\bfloat\b", "CGFloat", l) for l in s.split("\n"))
+    if t != s: open(f, "w").write(t)
+PY
 T="--target=x86_64-apple-macosx14.0 -DXNU_PLATFORM_MacOSX -nostdinc -isystem $RES -isystem $I"
 OBJC="$T -x objective-c -fobjc-runtime=macosx-14.0 -fobjc-arc -Wno-everything -Werror=implicit-function-declaration -Werror=int-conversion -O1 -isystem $OUT/ravyn -isystem $W/sdk/stubs -isystem $OUT/hdr -isystem $P/SDK/include -I$P/QuartzCore/include -I$H/compat -include $H/compat/CCCompat.h -I$H -I$H/../dock-cocoa"
 set +e; for f in main CCServices CCStatusBar CCSkyLight CCSkyLightStartup CCPrefs CCPanel CCInput CCDraw CCSymbols CCControls CCGallery CCExtras ../dock-cocoa/DockWindow ../dock-cocoa/SkyLightAPI; do clang $OBJC -c "$H/$f.m" -o "$OUT/o/$(basename $f).o" 2>&1 | grep "error"; done; set -e

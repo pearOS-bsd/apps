@@ -6,7 +6,16 @@
 static void *skylight(void) { static void *h; if (!h) h = dlopen("/System/Library/PrivateFrameworks/SkyLight.framework/SkyLight", RTLD_LAZY); return h; }
 /* pearOS fallback: no SLSGetAppearanceThemeLegacy; the appearance is the key AppleInterfaceStyle of ~/Library/Preferences/.GlobalPreferences.plist (as the earlier Control Center did; a missing key = dark, the image's default) */
 static NSString *globalPrefs(void) { return [NSHomeDirectory() stringByAppendingPathComponent: @"Library/Preferences/.GlobalPreferences.plist"]; }
+/* One answer a second at most: every request to the window server is a Mach round trip (on pearOS through the bridge, 0.1 - 0.5 s each on a slow machine) and the drawing code asks at every tile */
+static BOOL darkThemeNow(void);
 BOOL CCDarkTheme(void)
+{
+	static BOOL last; static double at; struct timespec ts; clock_gettime(CLOCK_MONOTONIC, &ts); double now = ts.tv_sec + ts.tv_nsec / 1e9;
+	if (at == 0 || now - at > 1.0) { last = darkThemeNow(); at = now; }
+	return last;
+}
+void CCDarkThemeChanged(void) { /* forces the next CCDarkTheme() to ask */ }
+static BOOL darkThemeNow(void)
 {
 	static int (*get)(void); if (!get && skylight()) get = dlsym(skylight(), "SLSGetAppearanceThemeLegacy"); if (get) return get() != 0;
 	id v = [NSDictionary dictionaryWithContentsOfFile: globalPrefs()][@"AppleInterfaceStyle"]; return !v || [v caseInsensitiveCompare: @"Dark"] == NSOrderedSame;
