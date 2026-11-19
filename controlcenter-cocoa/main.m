@@ -15,7 +15,7 @@ int main(int argc, const char *argv[])
 		[CCServices connectAll];
 		CCReadPreferences();
 		CCSkyLightStartup();
-		CCStatusBar *bar = [CCStatusBar new]; [bar start];
+		CCStatusBar *bar = [CCStatusBar new]; if (!getenv("CC_NO_STATUSBAR")) [bar start];       /* CC_NO_STATUSBAR: the bar already shows the items (pearOS: SystemUIServer draws a strip with the same ones); only the clicks on them are taken */
 		CCPanel *panel = [CCPanel new]; CCInput *input = [[CCInput alloc] initWithPanel: panel controlItemFrame: CGRectMake(1094 + CCDX(), 0, 42, 30) statusBar: bar]; (void)input;
 		CCNowPlayingStart();
 		if (getenv("CC_OPEN")) [NSTimer scheduledTimerWithTimeInterval: 3 repeats: NO block: ^(NSTimer *t) { (void)t; [panel toggle]; }];       /* test switch: open the panel 3 s after the start, from the run loop (before it, its commit did not always reach the render server on pearOS) */
