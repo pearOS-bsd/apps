@@ -29,3 +29,7 @@ CASpringAnimation *CCRawSpring(NSString *keyPath, double mass, double stiffness,
 
 /* The geometry of the real ControlCenter was measured on a 1280 x 800 screen, at the right edge: on a wider screen everything on the right moves by this much (the main display's width - 1280; CC_DX overrides) */
 CGFloat CCDX(void);
+
+/* Liquid Glass look (macOS 26): the panel and the tiles are translucent and the window server blurs what is behind the window (SLSSetWindowBackgroundBlurRadius, as the menus and NSVisualEffectView do).  CC_GLASS=0 gives the opaque greys measured on a Mac VM without a GPU. */
+BOOL CCGlassMode(void);
+void CCFillRRectA(CGContextRef c, CGRect r, CGFloat radius, CGFloat grey, CGFloat alpha);

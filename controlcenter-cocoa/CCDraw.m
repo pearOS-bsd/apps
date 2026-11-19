@@ -165,3 +165,6 @@ CGFloat CCDX(void)
 	if (getenv("CC_DX")) return dx = atof(getenv("CC_DX"));
 	CGRect b = CGDisplayBounds(CGMainDisplayID()); dx = b.size.width > 1280 ? b.size.width - 1280 : 0; return dx;
 }
+
+BOOL CCGlassMode(void) { static int g = -1; if (g < 0) g = getenv("CC_GLASS") && !strcmp(getenv("CC_GLASS"), "0") ? 0 : 1; return g; }
+void CCFillRRectA(CGContextRef c, CGRect r, CGFloat radius, CGFloat grey, CGFloat alpha) { CCFillGrey(c, grey, alpha); CCRRect(c, r, radius); CGContextFillPath(c); }
