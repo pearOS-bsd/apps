@@ -2,6 +2,8 @@
 #import "CCPanel.h"
 #import "CCDraw.h"
 #import "CCSymbols.h"
+#import "CCChrono.h"
+#import "CCGlass.h"
 #import "CCSkyLight.h"
 #import "../dock-cocoa/DockWindow.h"
 #import "../dock-cocoa/SkyLightAPI.h"
@@ -26,7 +28,7 @@ typedef struct { const CCCatalogEntry *e; int col, row, lines; } Placed;
 
 @implementation CCGallery
 {
-	CCPanel *panel; DockWindow *win; CALayer *layer; NSMutableArray<NSValue *> *itemRects; NSMutableArray<NSNumber *> *itemKinds; NSMutableArray<NSValue *> *catRects; NSMutableArray<NSNumber *> *sectionY; NSInteger selected; double scroll, contentH; NSMutableString *query; CGRect doneRect;
+	CCPanel *panel; DockWindow *win; CALayer *layer, *contentLayer; NSMutableArray<NSValue *> *itemRects; NSMutableArray<NSNumber *> *itemKinds; NSMutableArray<NSValue *> *catRects; NSMutableArray<NSNumber *> *sectionY; NSInteger selected; double scroll, contentH; NSMutableString *query; CGRect doneRect;
 	int dragKind; CGPoint dragStart; BOOL dragMoved;
 }
 - (instancetype)initWithPanel:(CCPanel *)p
@@ -36,7 +38,9 @@ typedef struct { const CCCatalogEntry *e; int col, row, lines; } Placed;
 	const SkyLightAPI *sl = SkyLightLoad(); const CCSkyLight *cc = CCSkyLightLoad(); if (!sl) return self;
 	win = [[DockWindow alloc] initWithFrame: kFrame level: 23 options: 0x10000]; if (!win) return self;
 	layer = [CALayer layer]; layer.frame = CGRectMake(0, 0, kFrame.size.width, kFrame.size.height);
-	CGImageRef img = [self newImage]; CCSetBandedContents(layer, img, 32); CGImageRelease(img);
+	if (CCGlassMode()) { CALayer *gl = CCGlassLayer(layer.bounds, 26); if (gl) [layer addSublayer: gl]; }       /* the real window is Liquid Glass (the full-screen capture of the Mac: the wallpaper shows through; the dark grey of a window capture is that glass over black) */
+	contentLayer = [CALayer layer]; contentLayer.frame = layer.bounds; [layer addSublayer: contentLayer];
+	CGImageRef img = [self newImage]; CCSetBandedContents(contentLayer, img, 32); CGImageRelease(img);
 	[win setRootLayer: layer];
 	if (cc->SetWindowClientPerceivedType) cc->SetWindowClientPerceivedType(sl->MainConnectionID(), win.windowID, 5);
 	CCShowWindow(win, 23);
@@ -44,7 +48,7 @@ typedef struct { const CCCatalogEntry *e; int col, row, lines; } Placed;
 }
 - (void)close { if (!win) return; const SkyLightAPI *sl = SkyLightLoad(); if (sl && sl->ReleaseWindow) sl->ReleaseWindow(sl->MainConnectionID(), win.windowID); win = nil; layer = nil; }
 - (BOOL)containsScreenPoint:(CGPoint)p { return win && CGRectContainsPoint(kFrame, p); }
-- (void)redraw { if (!win) return; CGImageRef img = [self newImage]; CCSetBandedContents(layer, img, 32); CGImageRelease(img); [CATransaction flush]; }
+- (void)redraw { if (!win) return; CGImageRef img = [self newImage]; CCSetBandedContents(contentLayer, img, 32); CGImageRelease(img); [CATransaction flush]; }
 - (void)scrollBy:(double)dy { scroll = MAX(0, MIN(MAX(0, contentH - (kFrame.size.height - kFooterH)), scroll - dy)); [self redraw]; }
 - (void)typeText:(NSString *)s { if ([s isEqual: @"\b"]) { if (query.length) [query deleteCharactersInRange: NSMakeRange(query.length - 1, 1)]; } else [query appendString: s]; scroll = 0; [self redraw]; }
 - (BOOL)isDragging { return dragKind >= 0; }
@@ -64,7 +68,7 @@ static CGSize tileSize(const CCCatalogEntry *e) { return CGSizeMake(e->w == 1 ? 
 - (void)drawItem:(const CCCatalogEntry *)e rect:(CGRect)r caption:(NSString *)l1 second:(NSString *)l2 in:(CGContextRef)c
 {
 	BOOL big = e->h == 2, disc = e->w == 1 && e->h == 1; CGFloat rad = big ? 34 : 32;
-	CCFillRRect(c, r, rad, 42); CGContextSaveGState(c); CCRRect(c, r, rad); CGContextClip(c); CCFillGrey(c, 255, 0.10); CGContextFillRect(c, CGRectMake(r.origin.x, r.origin.y, r.size.width, 1)); CGContextRestoreGState(c);       /* the lit top edge */
+	if (CCGlassMode()) { CCFillRRectA(c, r, rad, 255, 0.16); CGContextSetLineWidth(c, 1); CCFillGrey(c, 255, 0.22); CCRRect(c, CGRectInset(r, 0.5, 0.5), rad); CGContextStrokePath(c); } else CCFillRRect(c, r, rad, 42); CGContextSaveGState(c); CCRRect(c, r, rad); CGContextClip(c); CCFillGrey(c, 255, 0.10); CGContextFillRect(c, CGRectMake(r.origin.x, r.origin.y, r.size.width, 1)); CGContextRestoreGState(c);       /* the lit top edge */
 	CCFillGrey(c, 215, 1); CGContextSetLineWidth(c, 1.6); NSString *g = [NSString stringWithUTF8String: e->glyph];
 	CGPoint mid = CGPointMake(CGRectGetMidX(r), CGRectGetMidY(r));
 	if (disc) CCGlyph(c, g, mid, 22);
@@ -127,9 +131,10 @@ static CGSize tileSize(const CCCatalogEntry *e) { return CGSizeMake(e->w == 1 ? 
 	CCFillGrey(c, 255, 0.7); CCRRect(c, CGRectMake(r.origin.x + 40, CGRectGetMaxY(r) - 14, 80, 7), 3.5); CGContextFillPath(c);
 	CGContextRestoreGState(c);
 }
-- (void)drawCatIcon:(NSUInteger)i in:(CGRect)ic ctx:(CGContextRef)c
+- (void)drawCatIcon:(NSString *)name in:(CGRect)ic ctx:(CGContextRef)c
 {
-	if (i >= sizeof kCatIcon / sizeof *kCatIcon) return;
+	NSUInteger i = NSNotFound; for (NSUInteger q = 0; q < sizeof kCatIcon / sizeof *kCatIcon; q++) if ([name isEqual: @(kCatIcon[q].name)]) i = q;
+	if (i == NSNotFound) { CCFillRGB(c, 142, 142, 147); CCRRect(c, ic, 6); CGContextFillPath(c); CCFillGrey(c, 255, 1); CCGlyph(c, @"square.grid.2x2", CGPointMake(CGRectGetMidX(ic), CGRectGetMidY(ic)), 16); return; }
 	if (kCatIcon[i].r < 0) { CCFillGrey(c, 255, 1); for (int a = 0; a < 2; a++) for (int b = 0; b < 2; b++) CCFillDisc(c, CGPointMake(ic.origin.x + 7 + a * 12, ic.origin.y + 7 + b * 12), 9, 245); return; }
 	CCFillRGB(c, kCatIcon[i].r, kCatIcon[i].g, kCatIcon[i].b); CCRRect(c, ic, 6); CGContextFillPath(c);
 	if (kCatIcon[i].glyph) { CCFillRGB(c, kCatIcon[i].fr, kCatIcon[i].fg, kCatIcon[i].fb); CCGlyph(c, @(kCatIcon[i].glyph), CGPointMake(CGRectGetMidX(ic), CGRectGetMidY(ic)), 17); }
@@ -138,7 +143,7 @@ static CGSize tileSize(const CCCatalogEntry *e) { return CGSizeMake(e->w == 1 ? 
 {
 	CGFloat W = kFrame.size.width, H = kFrame.size.height;
 	CGContextRef c = CCBeginBitmap(kFrame.size, CGPointMake(0, 0));
-	CCFillRRect(c, CGRectMake(0, 0, W, H), 26, 32);
+	BOOL glass = CCGlassMode(); if (!glass) CCFillRRect(c, CGRectMake(0, 0, W, H), 26, 32);
 	CGContextSaveGState(c); CCRRect(c, CGRectMake(0, 0, W, H), 26); CGContextClip(c);
 	[itemRects removeAllObjects]; [itemKinds removeAllObjects]; [catRects removeAllObjects]; [sectionY removeAllObjects];
 	/* content, clipped (scrolls) */
@@ -146,17 +151,17 @@ static CGSize tileSize(const CCCatalogEntry *e) { return CGSizeMake(e->w == 1 ? 
 	CGContextTranslateCTM(c, 0, -scroll);
 	CGFloat y = 20; size_t n; const CCCatalogEntry *cat = CCCatalog(&n); NSArray *cats = CCCategories();
 	if (!query.length) {
-		CCFillRRect(c, CGRectMake(kContentX, y, kContentW, 169), 10, 52); CCText(c, @"What's New", kContentX + 20, y + 44, 14, YES, 255, 0);
+		if (glass) CCFillRRectA(c, CGRectMake(kContentX, y, kContentW, 169), 10, 255, 0.12); else CCFillRRect(c, CGRectMake(kContentX, y, kContentW, 169), 10, 52); CCText(c, @"What's New", kContentX + 20, y + 44, 14, YES, 255, 0);
 		NSArray *ln = @[ @"Control Center is more flexible", @"than ever — resize and rearrange", @"items to customize and access", @"what matters most to you. Your", @"favorite controls can also be added", @"to the menu bar." ];
 		for (NSUInteger i = 0; i < ln.count; i++) CCText(c, ln[i], kContentX + 20, y + 65 + i * 15, 12, NO, 255, 0);
 		[self drawPreview: c in: CGRectMake(kContentX + 236, y + 20, 200, 130)];
 		y += 189 + 6; CCText(c, @"Suggestions", kContentX, y + 6, 12, YES, 160, 0); y += 29;
-		NSMutableArray *sl = [NSMutableArray array]; for (NSNumber *k in @[ @(CCScene), @(CCAlarm), @(CCStopwatch), @(CCTileWindows), @(CCRunShortcut), @(CCZoom), @(CCVoiceMemo), @(CCQuickNote), @(CCRecognizeMusic) ]) [sl addObject: [NSValue valueWithPointer: CCCatalogFor(k.intValue)]];
+		NSMutableArray *sl = [NSMutableArray array]; for (NSNumber *k in @[ @(CCScene), @(CCAlarm), @(CCStopwatch), @(CCTileWindows), @(CCRunShortcut), @(CCZoom), @(CCVoiceMemo), @(CCQuickNote), @(CCRecognizeMusic) ]) if (CCCatalogVisible((CCKind)k.intValue)) [sl addObject: [NSValue valueWithPointer: CCCatalogFor(k.intValue)]];
 		y += [self layoutSuggestions: sl atY: y in: c] + 11;
 		for (NSUInteger ci = 1; ci < cats.count; ci++) {
 			NSMutableArray *items = [NSMutableArray array]; for (size_t i = 0; i < n; i++) if ([cats[ci] isEqual: [NSString stringWithUTF8String: cat[i].category]]) [items addObject: [NSValue valueWithPointer: &cat[i]]];
 			[sectionY addObject: @(y)]; if (!items.count) continue;
-			CCFillGrey(c, 52, 1); CGContextFillRect(c, CGRectMake(kContentX, y, kContentW, 1)); CCText(c, cats[ci], kContentX, y + 25, 12, YES, 160, 0); y += 49;
+			if (glass) CCFillGrey(c, 255, 0.14); else CCFillGrey(c, 52, 1); CGContextFillRect(c, CGRectMake(kContentX, y, kContentW, 1)); CCText(c, cats[ci], kContentX, y + 25, 12, YES, 160, 0); y += 49;
 			y += [self layoutCategory: items atY: y in: c] + 13;
 		}
 	} else {
@@ -168,20 +173,20 @@ static CGSize tileSize(const CCCatalogEntry *e) { return CGSizeMake(e->w == 1 ? 
 	contentH = y + 20;
 	CGContextRestoreGState(c);
 	/* footer */
-	CCFillGrey(c, 32, 1); CGContextFillRect(c, CGRectMake(kSidebarW, H - kFooterH, W - kSidebarW, kFooterH)); CCFillGrey(c, 52, 1); CGContextFillRect(c, CGRectMake(kSidebarW, H - kFooterH, W - kSidebarW, 1));
+	if (!glass) { CCFillGrey(c, 32, 1); CGContextFillRect(c, CGRectMake(kSidebarW, H - kFooterH, W - kSidebarW, kFooterH)); } if (glass) CCFillGrey(c, 255, 0.14); else CCFillGrey(c, 52, 1); CGContextFillRect(c, CGRectMake(kSidebarW, H - kFooterH, W - kSidebarW, 1));
 	CCText(c, @"Drag a control to place it in Control Center or Menu Bar…", kContentX, H - 24, 12.5, NO, 255, 0);
 	doneRect = CGRectMake(W - 79, H - 48, 59, 28); CCFillRGB(c, 9, 127, 255); CCRRect(c, doneRect, 14); CGContextFillPath(c); CCFillGrey(c, 255, 1); CCText(c, @"Done", CGRectGetMidX(doneRect), CGRectGetMidY(doneRect) + 4.5, 13, YES, 255, 0.5);
 	/* scroll bar of the content */
 	if (contentH > H - kFooterH) { CGFloat vis = H - kFooterH, th = MAX(30, vis * vis / contentH), ty = 6 + (vis - th - 12) * (scroll / MAX(1, contentH - vis)); CCFillGrey(c, 159, 1); CCRRect(c, CGRectMake(W - 11, ty, 5, th), 2.5); CGContextFillPath(c); }
 	/* sidebar: search field and categories */
-	CCFillRRect(c, CGRectMake(19, 19, 207, 32), 10, 30); CGContextSetLineWidth(c, 2); CCFillRGB(c, 53, 125, 167); CCRRect(c, CGRectMake(19, 19, 207, 32), 10); CGContextStrokePath(c); CCFillGrey(c, 170, 1); CCGlyph(c, @"magnifier", CGPointMake(34, 35), 15);
+	if (glass) CCFillRRectA(c, CGRectMake(19, 19, 207, 32), 10, 0, 0.30); else CCFillRRect(c, CGRectMake(19, 19, 207, 32), 10, 30); CGContextSetLineWidth(c, 2); CCFillRGB(c, 53, 125, 167); CCRRect(c, CGRectMake(19, 19, 207, 32), 10); CGContextStrokePath(c); CCFillGrey(c, 170, 1); CCGlyph(c, @"magnifier", CGPointMake(34, 35), 15);
 	CCText(c, query.length ? query : @"Search Controls", 50, 40, 13, NO, query.length ? 255 : 160, 0);
 	CGFloat cy = 58; if (selected < 0) selected = 0;
 	CGContextSaveGState(c); CGContextClipToRect(c, CGRectMake(0, 56, kSidebarW, H - 56));
 	for (NSUInteger i = 0; i < cats.count; i++) {
-		CGRect row = CGRectMake(20, cy + i * 46, 205, 46); if ((NSInteger)i == selected) CCFillRRect(c, CGRectInset(row, 0, 1), 12, 52);
+		CGRect row = CGRectMake(20, cy + i * 46, 205, 46); if ((NSInteger)i == selected) { if (glass) CCFillRRectA(c, CGRectInset(row, 0, 1), 12, 255, 0.14); else CCFillRRect(c, CGRectInset(row, 0, 1), 12, 52); }
 		[catRects addObject: [NSValue valueWithBytes: &row objCType: @encode(CGRect)]];
-		[self drawCatIcon: i in: CGRectMake(32, CGRectGetMidY(row) - 13, 26, 26) ctx: c];
+		[self drawCatIcon: cats[i] in: CGRectMake(32, CGRectGetMidY(row) - 13, 26, 26) ctx: c];
 		CCText(c, cats[i], 67, CGRectGetMidY(row) + 4.5, 13, NO, 255, 0);
 	}
 	CGContextRestoreGState(c);

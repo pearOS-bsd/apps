@@ -6,9 +6,11 @@ typedef NS_ENUM(int, CCKind) {
 	CCAlarm, CCStopwatch, CCTimer, CCScene, CCTileWindows, CCRunShortcut, CCVoiceMemo, CCQuickNote, CCRecognizeMusic, CCScreenSaver, CCKeyboardBrightness, CCLockScreen,
 	CCFastUserSwitching, CCBattery, CCClockMenu, CCTrueTone, CCNightShift, CCZoom, CCKindCount
 };
-typedef struct { CCKind kind; const char *id, *title, *category, *glyph; int w, h; int icon; } CCCatalogEntry;   /* icon = sidebar/gallery colour index */
+typedef struct { CCKind kind; const char *id, *title, *category, *glyph; int w, h; int icon; const char *chrono; } CCCatalogEntry;   /* icon = sidebar/gallery colour index; chrono = the kind of its descriptor in chronod's database (NULL: a module of ControlCenter itself) */
 const CCCatalogEntry *CCCatalog(size_t *count);
-const CCCatalogEntry *CCCatalogFor(CCKind k);
+const CCCatalogEntry *CCCatalogFor(CCKind k);                 /* any control, also one that is not offered here */
+const CCCatalogEntry *CCCatalogByChrono(const char *kind);    /* by the kind of its descriptor */
+BOOL CCCatalogVisible(CCKind k);                              /* offered in Edit Controls on this system */
 extern NSArray<NSString *> *CCCategories(void);
 
 @interface CCControl : NSObject

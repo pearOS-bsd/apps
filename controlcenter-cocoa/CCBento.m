@@ -70,13 +70,12 @@ static NSDictionary *moduleKinds(void)
 		@"ScreenMirroring": @(CCScreenMirroring), @"Battery": @(CCBattery), @"KeyboardBrightness": @(CCKeyboardBrightness) };
 }
 static NSString *moduleIdOf(CCKind k) { for (NSString *m in moduleKinds()) if ([moduleKinds()[m] intValue] == k) return m; return nil; }
-/* the chrono controls (extensions) that the catalog knows: a piece of the kind identifier inside the archived identity */
+/* the chrono controls (extensions): the kind of the descriptor is one of the strings inside the archived identity (CHSControlIdentity: kind, extension identity) */
 static int chronoKindOf(NSString *b64)
 {
 	NSData *d = b64decode(b64 ?: @""); if (!d.length) return -1;
-	NSString *s = [[NSString alloc] initWithData: d encoding: NSISOLatin1StringEncoding];
-	static const struct { const char *piece; int kind; } t[] = { { "display.screen-saver", CCScreenSaver }, { "display.true-tone", CCTrueTone }, { "display.night-shift", CCNightShift }, { "display.dark-mode", CCDarkMode }, { "stagemanager", CCStageManager } };
-	for (size_t i = 0; i < sizeof t / sizeof *t; i++) if ([s rangeOfString: @(t[i].piece)].location != NSNotFound) return t[i].kind;
+	NSDictionary *p = [NSPropertyListSerialization propertyListWithData: d options: 0 format: NULL error: NULL]; NSArray *objs = p[@"$objects"];
+	for (id o in objs) if ([o isKindOfClass: [NSString class]]) { const CCCatalogEntry *e = CCCatalogByChrono([o UTF8String]); if (e) return (int)e->kind; }
 	return -1;
 }
 

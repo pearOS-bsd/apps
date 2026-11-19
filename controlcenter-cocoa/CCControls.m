@@ -7,6 +7,7 @@
 #import "CCDraw.h"
 #import "CCPlatform.h"
 #import "CCBento.h"
+#import "CCChrono.h"
 
 /* ---- catalog (the gallery of the real Edit Controls: categories and suggestions seen on 26.7.2; the sets inside a category are partly guessed) ---- */
 static const CCCatalogEntry kCatalog[] = {
@@ -24,11 +25,42 @@ static const CCCatalogEntry kCatalog[] = {
 	{ CCBattery, "battery", "Battery", "Battery", "battery", 2, 1, 15 }, { CCClockMenu, "clock", "Clock", "Clock", "clock", 1, 1, 7 },
 	{ CCZoom, "zoom", "Zoom", "Zoom", "zoom", 2, 2, 3 }, { CCTrueTone, "truetone", "True Tone", "Display & Brightness", "truetone", 1, 1, 3 }, { CCNightShift, "nightshift", "Night Shift", "Display & Brightness", "nightshift", 1, 1, 3 },
 };
-const CCCatalogEntry *CCCatalog(size_t *n) { if (n) *n = sizeof kCatalog / sizeof *kCatalog; return kCatalog; }
-const CCCatalogEntry *CCCatalogFor(CCKind k) { for (size_t i = 0; i < sizeof kCatalog / sizeof *kCatalog; i++) if (kCatalog[i].kind == k) return &kCatalog[i]; return NULL; }
+/* the kinds of the descriptors of chronod's database that the catalog above stands for (the others of the database become entries of their own); fallback: offered even without the database (the extensions of ControlCenter itself) */
+static const struct { CCKind k; const char *chrono; int fallback; } kChronoOf[] = {
+	{ CCAlarm, "com.apple.mobiletimer.control.alarm", 0 }, { CCStopwatch, "com.apple.mobiletimer.control.stopwatch", 0 }, { CCTimer, "com.apple.mobiletimer.control.timer", 0 }, { CCScene, "com.apple.Home.TileControl", 0 },
+	{ CCTileWindows, "com.apple.windowmanager.tileTwoUpButton", 1 }, { CCRunShortcut, "ShortcutsControl", 0 }, { CCVoiceMemo, "com.apple.VoiceMemos.RecordWidget.startRecording.button", 0 }, { CCQuickNote, "com.apple.notes.widgetextension.quicknotecontrol", 0 },
+	{ CCScreenshot, "com.apple.controls.screenshot.capture-screen", 0 }, { CCScreenSaver, "com.apple.controls.display.screen-saver", 1 }, { CCDarkMode, "com.apple.controls.display.dark-mode", 1 }, { CCTrueTone, "com.apple.controls.display.true-tone", 1 },
+	{ CCNightShift, "com.apple.controls.display.night-shift", 1 }, { CCStageManager, "com.apple.windowmanager.stagemanager", 1 }, { CCLockScreen, "com.apple.controls.display.lock", 1 },
+};
+static CCCatalogEntry *gAllEntries; static size_t gAllN; static CCCatalogEntry *gShown; static size_t gShownN;
+static void buildCatalog(void)
+{
+	if (gAllEntries) return; size_t ns = sizeof kCatalog / sizeof *kCatalog, nd = CCChronoCount();
+	gAllEntries = calloc(ns + nd + 1, sizeof *gAllEntries); gShown = calloc(ns + nd + 1, sizeof *gShown); memcpy(gAllEntries, kCatalog, ns * sizeof *kCatalog); gAllN = ns;
+	BOOL have = CCChronoAvailable(), fallbackAll = getenv("CC_CHRONO_ALL") != NULL;
+	for (size_t i = 0; i < ns; i++) {
+		CCCatalogEntry *e = &gAllEntries[i]; int fb = 0; for (size_t q = 0; q < sizeof kChronoOf / sizeof *kChronoOf; q++) if (kChronoOf[q].k == e->kind) { e->chrono = kChronoOf[q].chrono; fb = kChronoOf[q].fallback; }
+		BOOL show = !e->chrono || (have ? CCChronoFind(e->chrono) != NULL : fb || fallbackAll); if (show) gShown[gShownN++] = *e;
+	}
+	for (size_t i = 0; i < nd; i++) {                                                   /* the controls of the database that the catalog does not know: an entry of their own, a button or a toggle of one cell */
+		const CCChronoControl *c = CCChronoAt(i); BOOL known = NO; for (size_t q = 0; q < sizeof kChronoOf / sizeof *kChronoOf; q++) if (!strcmp(kChronoOf[q].chrono, c->kind)) known = YES; if (known) continue;
+		CCCatalogEntry e = { (CCKind)(CCKindCount + (int)i), c->kind, c->name, strdup([CCChronoCategory(c) UTF8String]), "square.grid.2x2", 1, 1, 0, c->kind };
+		gAllEntries[gAllN++] = e; gShown[gShownN++] = e;
+	}
+}
+const CCCatalogEntry *CCCatalog(size_t *n) { buildCatalog(); if (n) *n = gShownN; return gShown; }
+const CCCatalogEntry *CCCatalogFor(CCKind k) { buildCatalog(); for (size_t i = 0; i < gAllN; i++) if (gAllEntries[i].kind == k) return &gAllEntries[i]; return NULL; }
+const CCCatalogEntry *CCCatalogByChrono(const char *kind) { buildCatalog(); for (size_t i = 0; i < gAllN; i++) if (gAllEntries[i].chrono && !strcmp(gAllEntries[i].chrono, kind)) return &gAllEntries[i]; return NULL; }
+BOOL CCCatalogVisible(CCKind k) { buildCatalog(); for (size_t i = 0; i < gShownN; i++) if (gShown[i].kind == k) return YES; return NO; }
+/* the groups of the sidebar: the order of the real one, only those that have a control here, then the others */
 NSArray<NSString *> *CCCategories(void)
 {
-	return @[ @"All Controls", @"Battery", @"Clock", @"Connectivity", @"Desktop & Finder", @"Display & Brightness", @"Fast User Switching", @"Focus", @"Home", @"Keyboards", @"Lock Screen", @"Notes", @"Now Playing", @"Screenshot", @"Shortcuts", @"Sounds", @"Utilities", @"Voice Memos", @"Zoom" ];
+	static NSArray *cached; if (cached) return cached; size_t n; const CCCatalogEntry *cat = CCCatalog(&n);
+	NSArray *order = @[ @"Battery", @"Clock", @"Connectivity", @"Desktop & Finder", @"Display & Brightness", @"Fast User Switching", @"Focus", @"Home", @"Keyboards", @"Lock Screen", @"Notes", @"Now Playing", @"Screenshot", @"Shortcuts", @"Sounds", @"Utilities", @"Voice Memos", @"Zoom" ];
+	NSMutableArray *out = [NSMutableArray arrayWithObject: @"All Controls"]; NSMutableSet *have = [NSMutableSet set]; for (size_t i = 0; i < n; i++) [have addObject: @(cat[i].category)];
+	for (NSString *c in order) if ([have containsObject: c]) { [out addObject: c]; [have removeObject: c]; }
+	for (NSString *c in [[have allObjects] sortedArrayUsingSelector: @selector(compare:)]) [out addObject: c];
+	return cached = out;
 }
 
 /* ---- grid: 4 columns, pitch measured on the real panel (x 974 1050 1127 1203, rows every 76, cell 63) ---- */
