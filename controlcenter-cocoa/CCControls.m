@@ -33,11 +33,25 @@ NSArray<NSString *> *CCCategories(void)
 #define kX0 (974 + CCDX())
 static const CGFloat kY0 = 42, kPitchX = 76.33, kPitchY = 76, kCell = 63;
 int CCMaxRows(void) { return 8; }
+/* the sizes of the controls in the real Edit Controls (the resize handle of a tile snaps between them): toggles are a round button or a pill, sliders half or full width, Now Playing and the big tiles a square */
+const CCSize *CCSizesFor(CCKind k, int *n)
+{
+	static const CCSize toggle[] = { {1,1}, {2,1} }, slider[] = { {2,1}, {4,1} }, square[] = { {1,1}, {2,1}, {2,2} }, fixed[] = { {2,2} }, scene[] = { {1,1}, {2,2} };
+	switch (k) {
+	case CCDisplay: case CCSound: case CCKeyboardBrightness: *n = 2; return slider;
+	case CCScreenSaver: *n = 3; return square;
+	case CCScene: *n = 2; return scene;
+	case CCNowPlaying: *n = 1; return fixed;
+	default: *n = 2; return toggle;
+	}
+}
 CGRect CCCellRect(int col, int row, int w, int h) { return CGRectMake(round(kX0 + col * kPitchX), kY0 + row * kPitchY, round(w * kCell + (w - 1) * (kPitchX - kCell)), h * kCell + (h - 1) * (kPitchY - kCell)); }
 
 @implementation CCControl
 - (const CCCatalogEntry *)entry { return CCCatalogFor(_kind); }
-- (CGRect)frame { const CCCatalogEntry *e = [self entry]; return CCCellRect(_col, _row, e->w, e->h); }
+- (int)cw { return _w ?: [self entry]->w; }
+- (int)ch { return _h ?: [self entry]->h; }
+- (CGRect)frame { return CCCellRect(_col, _row, [self cw], [self ch]); }
 @end
 
 @implementation CCLayout
@@ -54,23 +68,23 @@ CGRect CCCellRect(int col, int row, int w, int h) { return CGRectMake(round(kX0 
 	CFPropertyListRef v = CFPreferencesCopyAppValue(CFSTR("pearos.CCLayout"), CFSTR("com.apple.controlcenter"));       /* our key in the real domain; the real layout is stored elsewhere (not found) */
 	if (v && CFGetTypeID(v) == CFArrayGetTypeID()) {
 		NSMutableArray *list = [NSMutableArray array];
-		for (NSDictionary *d in (__bridge NSArray *)v) { if (![d isKindOfClass: [NSDictionary class]]) continue; CCControl *c = [CCControl new]; c.kind = [d[@"k"] intValue]; c.col = [d[@"c"] intValue]; c.row = [d[@"r"] intValue]; if ([c entry]) [list addObject: c]; }
+		for (NSDictionary *d in (__bridge NSArray *)v) { if (![d isKindOfClass: [NSDictionary class]]) continue; CCControl *c = [CCControl new]; c.kind = [d[@"k"] intValue]; c.col = [d[@"c"] intValue]; c.row = [d[@"r"] intValue]; c.w = [d[@"w"] intValue]; c.h = [d[@"h"] intValue]; if ([c entry]) [list addObject: c]; }
 		if (list.count) _controls = list;
 	}
 	if (v) CFRelease(v);
 }
 - (void)save
 {
-	NSMutableArray *a = [NSMutableArray array]; for (CCControl *c in _controls) [a addObject: @{ @"k": @(c.kind), @"c": @(c.col), @"r": @(c.row) }];
+	NSMutableArray *a = [NSMutableArray array]; for (CCControl *c in _controls) [a addObject: @{ @"k": @(c.kind), @"c": @(c.col), @"r": @(c.row), @"w": @(c.w), @"h": @(c.h) }];
 	CFPreferencesSetAppValue(CFSTR("pearos.CCLayout"), (__bridge CFArrayRef)a, CFSTR("com.apple.controlcenter")); CFPreferencesAppSynchronize(CFSTR("com.apple.controlcenter"));
 }
-- (int)rows { int m = 0; for (CCControl *c in _controls) m = MAX(m, c.row + [c entry]->h); return m; }
+- (int)rows { int m = 0; for (CCControl *c in _controls) m = MAX(m, c.row + [c ch]); return m; }
 - (CCControl *)controlAtPoint:(CGPoint)p { for (CCControl *c in _controls) if (CGRectContainsPoint([c frame], p)) return c; return nil; }
 - (BOOL)contains:(CCKind)k { for (CCControl *c in _controls) if (c.kind == k) return YES; return NO; }
 - (BOOL)fits:(int)col row:(int)row w:(int)w h:(int)h ignoring:(CCControl *)ig
 {
 	if (col < 0 || row < 0 || col + w > 4 || row + h > CCMaxRows()) return NO;
-	for (CCControl *c in _controls) { if (c == ig) continue; const CCCatalogEntry *e = [c entry]; if (col < c.col + e->w && c.col < col + w && row < c.row + e->h && c.row < row + h) return NO; }
+	for (CCControl *c in _controls) { if (c == ig) continue; if (col < c.col + [c cw] && c.col < col + w && row < c.row + [c ch] && c.row < row + h) return NO; }
 	return YES;
 }
 - (BOOL)add:(CCKind)k
@@ -82,10 +96,24 @@ CGRect CCCellRect(int col, int row, int w, int h) { return CGRectMake(round(kX0 
 - (void)remove:(CCControl *)c { [_controls removeObject: c]; [self save]; }
 - (BOOL)moveControl:(CCControl *)c toCol:(int)col row:(int)row
 {
-	const CCCatalogEntry *e = [c entry]; if (![self fits: col row: row w: e->w h: e->h ignoring: c]) return NO;
+	if (![self fits: col row: row w: [c cw] h: [c ch] ignoring: c]) return NO;
 	c.col = col; c.row = row; [self save]; return YES;
 }
+- (BOOL)resizeControl:(CCControl *)c toW:(int)w h:(int)h
+{
+	int n; const CCSize *s = CCSizesFor(c.kind, &n); BOOL ok = NO; for (int i = 0; i < n; i++) if (s[i].w == w && s[i].h == h) ok = YES;
+	if (!ok || ![self fits: c.col row: c.row w: w h: h ignoring: c]) return NO;
+	const CCCatalogEntry *e = [c entry]; c.w = (w == e->w && h == e->h) ? 0 : w; c.h = (w == e->w && h == e->h) ? 0 : h; return YES;
+}
+- (void)commit { [self save]; }
 @end
+
+/* the track: measured on the real panel (a full-width Sound: 34..216; Display / Keyboard 36..254; the half-width ones: 38 to 18 before the right end) */
+void CCSliderRange(CCControl *c, CGFloat *x0, CGFloat *x1)
+{
+	CGRect r = [c frame]; BOOL disp = c.kind != CCSound;
+	if ([c cw] == 4) { *x0 = r.origin.x + (disp ? 36 : 34); *x1 = r.origin.x + (disp ? 254 : 216); } else { *x0 = r.origin.x + 40; *x1 = r.origin.x + r.size.width - 18; }
+}
 
 /* ---- actions ---- */
 static void spawn(const char *path, const char *a1, const char *a2, const char *a3) { const char *argv[] = { path, a1, a2, a3, NULL }; pid_t pid; posix_spawn(&pid, path, NULL, NULL, (char *const *)argv, *_NSGetEnviron()); }

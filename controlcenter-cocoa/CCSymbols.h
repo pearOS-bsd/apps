@@ -4,3 +4,4 @@
 #import <CoreGraphics/CoreGraphics.h>
 #import <Foundation/Foundation.h>
 CGImageRef CCSymbolImage(NSString *name, CGFloat pointSize, CGFloat grey, CGFloat alpha);      /* retained by the cache (do not release); NULL when the symbol does not exist */
+CGImageRef CCSymbolImageRGB(NSString *name, CGFloat pointSize, CGFloat r, CGFloat g, CGFloat b, CGFloat alpha);       /* the same with a colour (0..255 each) */

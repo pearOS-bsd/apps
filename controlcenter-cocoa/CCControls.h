@@ -12,8 +12,9 @@ const CCCatalogEntry *CCCatalogFor(CCKind k);
 extern NSArray<NSString *> *CCCategories(void);
 
 @interface CCControl : NSObject
-@property CCKind kind; @property int col, row;
+@property CCKind kind; @property int col, row; @property int w, h;      /* w, h: the size in cells the user chose in Edit Controls (0 = the catalog size) */
 - (const CCCatalogEntry *)entry;
+- (int)cw; - (int)ch;                    /* the size in cells now */
 - (CGRect)frame;                         /* screen rectangle in the panel */
 @end
 
@@ -27,8 +28,12 @@ extern NSArray<NSString *> *CCCategories(void);
 - (void)remove:(CCControl *)c;
 - (BOOL)contains:(CCKind)k;
 - (BOOL)moveControl:(CCControl *)c toCol:(int)col row:(int)row;
+- (BOOL)resizeControl:(CCControl *)c toW:(int)w h:(int)h;     /* only to a size the control offers (CCSizesFor) and that fits */
+- (void)commit;                          /* saves */
 - (void)resetDefaults;
 @end
+typedef struct { int w, h; } CCSize;
+const CCSize *CCSizesFor(CCKind k, int *count);         /* the sizes the real Edit Controls offers a control (the resize handle snaps to them) */
 CGRect CCCellRect(int col, int row, int w, int h);      /* screen rectangle of a grid area */
 int CCMaxRows(void);
 
@@ -37,6 +42,7 @@ NSString *CCFocusActiveMode(void); void CCFocusSet(NSString *mode); NSString *CC
 NSString *CCStateText(CCKind k);         /* "Off", "On", subtitle, or nil */
 BOOL CCIsOn(CCKind k);
 void CCPerform(CCKind k);                /* a click on the control */
+void CCSliderRange(CCControl *c, CGFloat *x0, CGFloat *x1);   /* the track of a slider control in screen x, by its width */
 double CCSliderGet(CCKind k);            /* Display, Sound: 0..1 */
 void CCSliderSet(CCKind k, double v);
 void CCMediaCommand(int command);        /* MediaRemote: 0 play, 1 pause, 2 toggle, 4 next, 5 previous */

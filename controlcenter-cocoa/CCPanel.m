@@ -14,7 +14,7 @@ NSString *const CCEditModeChanged = @"CCEditModeChanged";
 #define kPanelX (966 + CCDX())
 static const CGFloat kPanelY = 34, kPanelW = 308;
 
-static CGRect editPill(CGRect panel) { return CGRectMake(1074 + CCDX(), CGRectGetMaxY(panel) - 31, 93, 23); }          /* "Edit Controls": 502..525 in a panel ending at 533 */
+static CGRect editPill(CGRect panel) { return CGRectMake(1072 + CCDX(), CGRectGetMaxY(panel) - 33, 96, 24); }          /* "Edit Controls": 502..525 in a panel ending at 533 */
 
 /* CC_STAGES=1: each stage of show() sends a harmless request to the window server (a different getter at each stage), so that the log of the Mach bridge shows how far the program got when it waits for something that never comes (stderr is not visible on pearOS) */
 static void ccTrace(const char *s)
@@ -26,7 +26,7 @@ static void ccTrace(const char *s)
 }
 @implementation CCPanel
 {
-	DockWindow *win; CALayer *layer, *baseLayer, *tileLayer, *glassLayer; NSMutableArray<CALayer *> *glassTiles; NSMutableArray<CALayer *> *tiles; NSMutableArray<CCControl *> *tileOwners; CCControl *hovered; NSUInteger tileGeneration; BOOL editing; CCGallery *gallery;
+	DockWindow *win; CALayer *editGlass; NSMutableDictionary<NSNumber *, NSValue *> *oldFrames; CCControl *resizing; CALayer *layer, *baseLayer, *tileLayer, *glassLayer; NSMutableArray<CALayer *> *glassTiles; NSMutableArray<CALayer *> *tiles; NSMutableArray<CCControl *> *tileOwners; CCControl *hovered; NSUInteger tileGeneration; BOOL editing; CCGallery *gallery;
 	CCKind pageKind; BOOL hasPage; CGFloat pageX; NSArray<CCRow *> *pageRows; CCControl *pressed; CGPoint pressPoint; BOOL moved; CCControl *dragSlider; NSTimer *poll;
 }
 - (BOOL)visible { return win != nil; }
@@ -44,18 +44,21 @@ static void ccTrace(const char *s)
 - (void)drawControl:(CCControl *)ct in:(CGContextRef)c dark:(BOOL)dark
 {
 	const CCCatalogEntry *e = [ct entry]; CGRect r = [ct frame]; CGPoint ctr = CGPointMake(CGRectGetMidX(r), CGRectGetMidY(r));
-	BOOL on = CCIsOn(ct.kind), disc1 = e->w == 1 && e->h == 1; CGFloat radius = (e->h == 1 && e->w <= 2) ? 31.5 : 24;
+	int cw = ct.cw, chh = ct.ch; BOOL on = CCIsOn(ct.kind), disc1 = cw == 1 && chh == 1; CGFloat radius = chh == 1 ? 31.5 : 34;
 	BOOL whiteTile = disc1 && on;                                                 /* a switched-on one-cell toggle is a white disc with a dark glyph (the Dark Mode button of the real panel) */
 	if (CCGlassMode() && !whiteTile) CCFillRRectA(c, r, radius, dark ? 150 : 120, 0.03); else CCFillRRect(c, r, radius, whiteTile ? 255 : (dark ? 111 : 109));
-	CGFloat ink = whiteTile ? 0 : 255; CCFillGrey(c, ink, 1); CGContextSetLineWidth(c, 1.6);
+	if (whiteTile && (ct.kind == CCWifi || ct.kind == CCBluetooth || ct.kind == CCAirDrop)) CCFillRGB(c, 10, 132, 255); else CCFillGrey(c, whiteTile ? 0 : 255, 1);      /* the connectivity buttons that are on: a white disc and a blue glyph */
+	CGContextSetLineWidth(c, 1.6);
 	switch (ct.kind) {
 	case CCDisplay: case CCSound: case CCKeyboardBrightness: {
-		CCText(c, [NSString stringWithUTF8String: e->title], r.origin.x + 16, r.origin.y + (ct.kind == CCDisplay ? 23 : 22), 13, YES, 255, 0);
-		BOOL disp = ct.kind != CCSound; CGFloat y = r.origin.y + (ct.kind == CCDisplay ? 43 : 42), x0 = r.origin.x + (disp ? 36 : 34), x1 = r.origin.x + (disp ? 254 : 216);
+		BOOL wide = cw == 4, disp = ct.kind != CCSound; CGFloat x0, x1; CCSliderRange(ct, &x0, &x1);
+		CCText(c, [NSString stringWithUTF8String: e->title], r.origin.x + (wide ? 16 : 18), r.origin.y + (ct.kind == CCDisplay ? 23 : 22), 13, YES, 255, 0);
+		CGFloat y = r.origin.y + (ct.kind == CCDisplay ? 43 : 42);
 		CCFillRRect(c, CGRectMake(x0, y - 2, x1 - x0, 4), 2, 150);
 		double v = CCSliderGet(ct.kind); if (v > 0.001) { CCFillRRect(c, CGRectMake(x0, y - 2, (x1 - x0) * v, 4), 2, 235); CCFillDisc(c, CGPointMake(x0 + (x1 - x0) * v, y), 14, 255); }
 		CCFillGrey(c, 205, 1);
-		if (disp) { CCGlyph(c, @"sun.min", CGPointMake(r.origin.x + 22, y), 14); CCGlyph(c, @"sun.max", CGPointMake(r.origin.x + 268, y), 16); }
+		if (!wide) CCGlyph(c, disp ? @"sun.min" : @"speaker", CGPointMake(r.origin.x + 24, y), 14);
+		else if (disp) { CCGlyph(c, @"sun.min", CGPointMake(r.origin.x + 22, y), 14); CCGlyph(c, @"sun.max", CGPointMake(r.origin.x + 268, y), 16); }
 		else { CCGlyph(c, @"speaker", CGPointMake(r.origin.x + 20, y), 16); CCGlyph(c, @"speaker.wave", CGPointMake(r.origin.x + 231, y), 16); CCFillDisc(c, CGPointMake(r.origin.x + 265, y), 26, 147); CCFillGrey(c, 255, 1); CCGlyph(c, @"airplay", CGPointMake(r.origin.x + 265, y), 16); }
 		break; }
 	case CCNowPlaying: {
@@ -68,8 +71,9 @@ static void ccTrace(const char *s)
 		CCFillGrey(c, title ? 255 : 160, 1); CCGlyph(c, @"rewind", CGPointMake(r.origin.x + 33, by), 24); CCGlyph(c, @"forward", CGPointMake(r.origin.x + 110, by), 24);
 		break; }
 	default:
-		if (disc1) { CCGlyph(c, [NSString stringWithUTF8String: e->glyph], ctr, 22); }
-		else if (e->h == 2) {                                                    /* big square tile: glyph above, title below */
+		if (ct.kind == CCBattery && !disc1) { NSString *t = CCStateText(CCBattery) ?: @"100%"; CCFillGrey(c, 255, 1); CGFloat w = CCTextWidth(t, 13, YES); CCGlyph(c, @"battery", CGPointMake(ctr.x - w / 2 - 14, ctr.y), 20); CCText(c, t, ctr.x - w / 2 + 6, ctr.y + 4.5, 13, YES, 255, 0); }
+		else if (disc1) { NSString *g = [NSString stringWithUTF8String: e->glyph]; if (!on && (ct.kind == CCWifi || ct.kind == CCBluetooth)) g = [g stringByAppendingString: @".slash"]; CCGlyph(c, g, ctr, 22); }
+		else if (chh == 2) {                                                    /* big square tile: glyph above, title below */
 			CCGlyph(c, [NSString stringWithUTF8String: e->glyph], CGPointMake(r.origin.x + 26, r.origin.y + 28), 24); CCFillGrey(c, 255, 1);
 			CCText(c, [NSString stringWithUTF8String: e->title], r.origin.x + 14, r.origin.y + r.size.height - 14, 13, YES, 255, 0);
 		} else {                                                                 /* wide: round icon on the left, state or title on the right */
@@ -112,11 +116,11 @@ static void ccTrace(const char *s)
 	if (editing) {
 		int rows = MIN(lay.rows + 2, CCMaxRows());
 		for (int rw = 0; rw < rows; rw++) for (int cl = 0; cl < 4; cl++) {                      /* empty slots */
-			BOOL used = NO; for (CCControl *ct in lay.controls) { const CCCatalogEntry *e = [ct entry]; if (cl >= ct.col && cl < ct.col + e->w && rw >= ct.row && rw < ct.row + e->h) used = YES; }
+			BOOL used = NO; for (CCControl *ct in lay.controls) { if (cl >= ct.col && cl < ct.col + ct.cw && rw >= ct.row && rw < ct.row + ct.ch) used = YES; }
 			if (!used) { CGRect r = CCCellRect(cl, rw, 1, 1); CCFillDisc(c, CGPointMake(CGRectGetMidX(r), CGRectGetMidY(r)), 63, dark ? 93 : 190); }
 		}
 	} else {
-		CGRect p = editPill(panel); CCFillRRect(c, p, 11.5, dark ? 111 : 109); CCText(c, @"Edit Controls", CGRectGetMidX(p), CGRectGetMidY(p) + 4.5, 13, NO, 255, 0.5);
+		CGRect p = editPill(panel); if (!CCGlassMode()) CCFillRRect(c, p, 12, dark ? 111 : 109); CCText(c, @"Edit Controls", CGRectGetMidX(p), CGRectGetMidY(p) + 4.5, 13, YES, 255, 0.5);
 	}
 	return CCEndBitmap(c);
 }
@@ -127,7 +131,8 @@ static const CGFloat kTilePad = 4;
 	CCSetDarkInk(CCGlassMode() && !dark);
 	CGRect f = CGRectInset([ct frame], -kTilePad, -kTilePad);
 	CGContextRef c = CCBeginBitmap(f.size, f.origin); [self drawControl: ct in: c dark: dark];
-	if (editing) { CGRect r = [ct frame]; CGPoint b = CGPointMake(r.origin.x + 8, r.origin.y + 8); CCFillDisc(c, b, 19, dark ? 66 : 120); CCFillGrey(c, 255, 1); CGContextSetLineWidth(c, 1.4); CCGlyph(c, @"minus", b, 14); }
+	if (editing) { CGRect r = [ct frame]; CGPoint b = CGPointMake(r.origin.x + 8, r.origin.y + 8); CCFillDisc(c, b, 19, dark ? 66 : 120); CCFillGrey(c, 255, 1); CGContextSetLineWidth(c, 1.4); CCGlyph(c, @"minus", b, 14);
+		int n; CCSizesFor(ct.kind, &n); if (n > 1) { CGPoint h = CGPointMake(CGRectGetMaxX(r) - 10, CGRectGetMaxY(r) - 10); CCFillDisc(c, h, 19, dark ? 66 : 120); CCFillGrey(c, 255, 1); CCGlyph(c, @"resize", h, 12); } }
 	return CCEndBitmap(c);
 }
 /* The tiles are drawn one per run-loop turn after the panel is shown (a slow or blocking control does not hold the whole panel back); a newer redraw cancels the older one */
@@ -152,9 +157,20 @@ static const CGFloat kTilePad = 4;
 		for (CALayer *g in glassTiles) [g removeFromSuperlayer]; glassTiles = [NSMutableArray array];
 		for (CCControl *ct in cs) {
 			CALayer *l = [CALayer layer]; l.contentsGravity = kCAGravityResize; l.frame = [self tileFrame: ct]; [tileLayer addSublayer: l]; [tiles addObject: l]; [tileOwners addObject: ct];
-			if (CCGlassMode() && glassLayer) { CGRect f = CGRectInset([self tileFrame: ct], kTilePad, kTilePad); const CCCatalogEntry *e = [ct entry]; CALayer *g = CCGlassLayer(f, (e->h == 1 && e->w <= 2) ? 31.5 : 24); [glassLayer addSublayer: g ?: [CALayer layer]]; [glassTiles addObject: g ?: [CALayer layer]]; }
+			if (CCGlassMode() && glassLayer) { CGRect f = CGRectInset([self tileFrame: ct], kTilePad, kTilePad); CALayer *g = CCGlassLayer(f, ct.ch == 1 ? 31.5 : 34); [glassLayer addSublayer: g ?: [CALayer layer]]; [glassTiles addObject: g ?: [CALayer layer]]; }
+			NSValue *old = oldFrames[@((NSUInteger)(__bridge void *)ct)];
+			if (old) { CGRect of; [old getValue: &of]; CGRect nf = l.frame; CALayer *g = glassTiles.count ? glassTiles.lastObject : nil;
+				if (of.size.width == nf.size.width && of.size.height == nf.size.height) { if (!CGRectEqualToRect(of, nf)) for (CALayer *t in @[ l, g ?: l ]) { CASpringAnimation *a = CCSwiftUISpring(@"position", 0.4867, 1.0); CGPoint from = CGPointMake(CGRectGetMidX(of), CGRectGetMidY(of)), to = t.position; a.fromValue = [NSValue valueWithBytes: &from objCType: @encode(CGPoint)]; a.toValue = [NSValue valueWithBytes: &to objCType: @encode(CGPoint)]; [t addAnimation: a forKey: @"glide"]; } }
+				else for (CALayer *t in @[ l, g ?: l ]) { CASpringAnimation *a = CCSwiftUISpring(@"opacity", 0.4867, 1.0); a.fromValue = @0; a.toValue = @1; [t addAnimation: a forKey: @"grow"]; } }
 		}
 	}
+	/* the glass of the "Edit Controls" pill */
+	if (CCGlassMode() && glassLayer) {
+		CGRect ep = editPill([self panelRect]); CGRect lr = CGRectMake(ep.origin.x - kWindow.origin.x, kWindow.size.height - (ep.origin.y - kWindow.origin.y) - ep.size.height, ep.size.width, ep.size.height);
+		if (!editGlass) { editGlass = CCGlassLayer(lr, 12); if (editGlass) [glassLayer addSublayer: editGlass]; }
+		editGlass.position = CGPointMake(CGRectGetMidX(lr), CGRectGetMidY(lr)); editGlass.hidden = editing || hasPage;
+	}
+	oldFrames = nil;
 	[CATransaction commit];
 	tileGeneration++; NSUInteger gen = tileGeneration; __weak CCPanel *w = self;
 	dispatch_async(dispatch_get_main_queue(), ^{ [w fillTile: 0 generation: gen fade: fade && same dark: dark]; });
@@ -181,6 +197,12 @@ static const CGFloat kTilePad = 4;
 	if (!win || hasPage || editing) return;
 	CCControl *ct = CGRectContainsPoint([self panelRect], p) ? [[CCLayout shared] controlAtPoint: p] : nil; if (ct == hovered || pressed) return;
 	[self scaleTile: hovered to: 1 response: 0.25 damping: 0.75]; hovered = ct; [self scaleTile: ct to: 1.02 response: 0.25 damping: 0.75];
+}
+/* a control moved, was resized, added or removed: the tile layers are rebuilt, and a tile that only moved glides there on a spring (the SwiftUI layout animation; the constants are the (0.4867, 1.0) one) */
+- (void)relayout
+{
+	oldFrames = [NSMutableDictionary dictionary]; for (NSUInteger i = 0; i < tileOwners.count; i++) oldFrames[@((NSUInteger)(__bridge void *)tileOwners[i])] = ({ CGRect fr = tiles[i].frame; [NSValue valueWithBytes: &fr objCType: @encode(CGRect)]; });
+	tileOwners = nil; [self redraw];
 }
 - (void)redrawFading { [self applyFading: YES]; }
 - (void)redraw { [self applyFading: NO]; }
@@ -229,7 +251,7 @@ static const CGFloat kTilePad = 4;
 - (void)hide
 {
 	if (!win) return;
-	hasPage = NO; pageRows = nil; pageX = 0;
+	hasPage = NO; pageRows = nil; pageX = 0; editGlass = nil;
 	[self setEditing: NO]; [poll invalidate]; poll = nil;
 	DockWindow *dying = win; CALayer *dl = layer; win = nil; layer = nil;
 	CABasicAnimation *fade = [CABasicAnimation animationWithKeyPath: @"opacity"]; fade.fromValue = @1; fade.toValue = @0; fade.duration = 0.12; fade.fillMode = kCAFillModeForwards; fade.removedOnCompletion = NO; [dl addAnimation: fade forKey: @"close-fade"]; [CATransaction flush];       /* 0.12 s fade out (approximate), then the window goes */
@@ -252,13 +274,13 @@ static const CGFloat kTilePad = 4;
 }
 - (void)scrollGallery:(double)dy { [gallery scrollBy: dy]; }
 - (void)typeInGallery:(NSString *)s { [gallery typeText: s]; }
-- (BOOL)addControl:(CCKind)k { BOOL ok = [[CCLayout shared] add: k]; [self redraw]; return ok; }
+- (BOOL)addControl:(CCKind)k { BOOL ok = [[CCLayout shared] add: k]; [self relayout]; return ok; }
 
 /* ---- mouse ---- */
 - (CCControl *)sliderAt:(CGPoint)p { CCControl *c = [[CCLayout shared] controlAtPoint: p]; if (!c) return nil; return (c.kind == CCDisplay || c.kind == CCSound || c.kind == CCKeyboardBrightness) ? c : nil; }
 - (void)setSlider:(CCControl *)c atX:(CGFloat)x
 {
-	CGRect r = [c frame]; BOOL disp = c.kind != CCSound; CGFloat x0 = r.origin.x + (disp ? 36 : 34), x1 = r.origin.x + (disp ? 254 : 216);
+	CGFloat x0, x1; CCSliderRange(c, &x0, &x1);
 	CCSliderSet(c.kind, MAX(0, MIN(1, (x - x0) / (x1 - x0)))); [self redraw];
 }
 - (void)refreshPage { if (hasPage) { pageRows = CCPageRows(pageKind); [self redraw]; } }
@@ -269,7 +291,8 @@ static const CGFloat kTilePad = 4;
 	if (!CGRectContainsPoint([self panelRect], p)) return NO;
 	CCLayout *lay = [CCLayout shared]; CCControl *ct = [lay controlAtPoint: p]; pressed = nil; moved = NO; dragSlider = nil;
 	if (editing) {
-		for (CCControl *c in [lay.controls copy]) { CGRect r = [c frame]; if (hypot(p.x - (r.origin.x + 8), p.y - (r.origin.y + 8)) <= 10) { [lay remove: c]; [self redraw]; return YES; } }
+		for (CCControl *c in [lay.controls copy]) { CGRect r = [c frame]; if (hypot(p.x - (r.origin.x + 8), p.y - (r.origin.y + 8)) <= 10) { [lay remove: c]; [self relayout]; return YES; } }
+		for (CCControl *c in lay.controls) { int n; CCSizesFor(c.kind, &n); CGRect r = [c frame]; if (n > 1 && hypot(p.x - (CGRectGetMaxX(r) - 10), p.y - (CGRectGetMaxY(r) - 10)) <= 12) { resizing = c; return YES; } }
 		pressed = ct; pressPoint = p; return YES;
 	}
 	if (hasPage) {
@@ -285,6 +308,12 @@ static const CGFloat kTilePad = 4;
 {
 	if (!win) return NO;
 	if (dragSlider) { [self setSlider: dragSlider atX: p.x]; return YES; }
+	if (resizing) {                                                                      /* the handle follows the pointer: the nearest size the control offers that fits */
+		CGRect r = [resizing frame]; double wc = (p.x + 10 - r.origin.x) / 76.33, hc = (p.y + 10 - r.origin.y) / 76; int n; const CCSize *s = CCSizesFor(resizing.kind, &n), *best = NULL; double bd = 1e9;
+		for (int i = 0; i < n; i++) { double d = fabs(s[i].w - wc) + fabs(s[i].h - hc); if (d < bd) { bd = d; best = &s[i]; } }
+		if (best && (best->w != resizing.cw || best->h != resizing.ch) && [[CCLayout shared] resizeControl: resizing toW: best->w h: best->h]) [self relayout];
+		return YES;
+	}
 	if (pressed && hypot(p.x - pressPoint.x, p.y - pressPoint.y) > 4) moved = YES;
 	return pressed != nil;
 }
@@ -292,16 +321,17 @@ static const CGFloat kTilePad = 4;
 {
 	if (!win) return NO;
 	if (dragSlider) { dragSlider = nil; return YES; }
+	if (resizing) { resizing = nil; [[CCLayout shared] commit]; return YES; }
 	CCControl *ct = pressed; pressed = nil; if (!ct) return NO;
 	[self scaleTile: ct to: (hovered == ct ? 1.02 : 1) response: 0.25 damping: 0.75];
 	if (editing) {                                                                       /* drag a control to another cell */
 		if (moved) {                                                                    /* the control's top-left follows the pointer; the cell under its centre is the target */
 			CGRect f = [ct frame]; int col = (int)floor((f.origin.x + (p.x - pressPoint.x) - 974 - CCDX() + 31) / 76.33), row = (int)floor((f.origin.y + (p.y - pressPoint.y) - 42 + 31) / 76);
-			[[CCLayout shared] moveControl: ct toCol: col row: row]; [self redraw];
+			if ([[CCLayout shared] moveControl: ct toCol: col row: row]) [self relayout]; else [self redraw];
 		}
 		return YES;
 	}
-	if (!moved && CCPageRows(ct.kind) && ((ct.kind == CCDisplay || ct.kind == CCSound) ? pressPoint.y < [ct frame].origin.y + 28 : ([ct entry]->w == 2 && pressPoint.x > [ct frame].origin.x + 52))) { pageKind = ct.kind; pageX = 0; pageRows = CCPageRows(pageKind); hasPage = YES; [self redrawFading]; [self animatePageIn]; return YES; }
+	if (!moved && CCPageRows(ct.kind) && ((ct.kind == CCDisplay || ct.kind == CCSound) ? pressPoint.y < [ct frame].origin.y + 28 : (ct.cw == 2 && pressPoint.x > [ct frame].origin.x + 52))) { pageKind = ct.kind; pageX = 0; pageRows = CCPageRows(pageKind); hasPage = YES; [self redrawFading]; [self animatePageIn]; return YES; }
 	if (!moved) { CCPerform(ct.kind); [self performSelector: @selector(redrawFading) withObject: nil afterDelay: 0.25]; }
 	return YES;
 }

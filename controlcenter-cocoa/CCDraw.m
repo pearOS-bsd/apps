@@ -35,19 +35,19 @@ CGContextRef CCBeginBitmap(CGSize size, CGPoint origin)
 	return c;
 }
 CGImageRef CCEndBitmap(CGContextRef c) { CGImageRef i = CGBitmapContextCreateImage(c); CGContextRelease(c); return i; }
-static CGFloat sInk = 255, sInkA = 1;
+static CGFloat sInk = 255, sInkA = 1, sInkR, sInkG, sInkB; static BOOL sInkRGB;
 static BOOL sDarkInk;            /* the light appearance over glass: white ink becomes dark, as the labels of the real panel (vibrancy) */
 void CCSetDarkInk(BOOL on) { sDarkInk = on; }
 static CGFloat inkOf(CGFloat v) { return sDarkInk && v >= 200 ? 28 : v; }            /* the last colour set: SF symbols are drawn tinted with it */
 void CCFillGrey(CGContextRef c, CGFloat v, CGFloat a)
 {
-	sInk = v; sInkA = a;
+	sInk = v; sInkA = a; sInkRGB = NO;
 	CGFloat k[4] = { v / 255, v / 255, v / 255, a }; CGColorRef col = CGColorCreate(rgb(), k);
 	CGContextSetFillColorWithColor(c, col); CGContextSetStrokeColorWithColor(c, col); CGColorRelease(col);
 }
 void CCFillRGB(CGContextRef c, int r, int g, int b)
 {
-	sInk = (r + g + b) / 3.0; sInkA = 1;
+	sInk = (r + g + b) / 3.0; sInkA = 1; sInkR = r; sInkG = g; sInkB = b; sInkRGB = YES;
 	CGFloat k[4] = { r / 255.0, g / 255.0, b / 255.0, 1 }; CGColorRef col = CGColorCreate(rgb(), k);
 	CGContextSetFillColorWithColor(c, col); CGContextSetStrokeColorWithColor(c, col); CGColorRelease(col);
 }
@@ -79,12 +79,12 @@ static NSString *symbolFor(NSString *n)
 		@"camera": @"camera.viewfinder", @"play": @"play.fill", @"pause": @"pause.fill", @"forward": @"forward.fill", @"rewind": @"backward.fill", @"sun.min": @"sun.min", @"sun.max": @"sun.max", @"speaker": @"speaker.fill",
 		@"speaker.wave": @"speaker.wave.3.fill", @"airplay": @"airplay.audio", @"dark": @"circle.lefthalf.filled", @"alarm": @"alarm", @"stopwatch": @"stopwatch", @"timer": @"timer", @"clock": @"clock", @"lightbulb": @"lightbulb.fill",
 		@"waveform": @"waveform", @"note": @"note.text", @"shazam": @"shazam.logo.fill", @"screensaver": @"play.display", @"shortcut": @"square.2.layers.3d", @"tile": @"rectangle.lefthalf.inset.filled", @"person": @"person.crop.circle",
-		@"lock": @"lock.fill", @"keyboard": @"keyboard", @"battery": @"battery.100", @"plus": @"plus", @"minus": @"minus", @"magnifier": @"magnifyingglass" };
+		@"lock": @"lock.fill", @"keyboard": @"keyboard", @"battery": @"battery.100", @"plus": @"plus", @"resize": @"arrow.up.left.and.arrow.down.right", @"minus": @"minus", @"magnifier": @"magnifyingglass" };
 	return m[n];
 }
 void CCGlyph(CGContextRef c, NSString *n, CGPoint o, CGFloat size)
 {
-	if (!getenv("CC_NO_SYMBOLS")) { NSString *s = symbolFor(n); CGImageRef img = s ? CCSymbolImage(s, size * 0.85, inkOf(sInk), sInkA) : NULL;
+	if (!getenv("CC_NO_SYMBOLS")) { NSString *s = symbolFor(n); CGImageRef img = s ? (sInkRGB ? CCSymbolImageRGB(s, size * 0.85, sInkR, sInkG, sInkB, sInkA) : CCSymbolImage(s, size * 0.85, inkOf(sInk), sInkA)) : NULL;
 		if (img) { CGFloat w = CGImageGetWidth(img) / 2.0, h = CGImageGetHeight(img) / 2.0; CGContextSaveGState(c); CGContextTranslateCTM(c, o.x, o.y); CGContextScaleCTM(c, 1, -1); CGContextDrawImage(c, CGRectMake(-w / 2, -h / 2, w, h), img); CGContextRestoreGState(c); return; } }
 	CGFloat u = size / 24.0; CGContextSaveGState(c); CGContextTranslateCTM(c, o.x, o.y); CGContextScaleCTM(c, u, u); CGContextSetLineWidth(c, 1.7);
 	if ([n hasPrefix: @"wifi"] || [n isEqual: @"airdrop"]) {
