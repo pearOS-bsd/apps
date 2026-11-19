@@ -155,7 +155,11 @@ static id<CCUserNotifications> unDaemon(void)
 static BOOL haveDND(void) { return dndService() != nil; }
 NSString *CCFocusActiveMode(void)           /* the mode identifier of the active assertion, nil when no Focus is on */
 {
-	if (!haveDND()) { [unDaemon() focusWithReply: ^(BOOL on) { unFocus = on; }]; return unFocus ? @"com.apple.donotdisturb.mode.default" : nil; }
+	if (!haveDND()) {                       /* the question goes to usernoted from a background queue, at most every 2 s and never two at once: the main thread (the panel is drawn on it) must not wait for a daemon that may not run */
+		static double last; static BOOL busy; double now = CFAbsoluteTimeGetCurrent();
+		if (!busy && now - last > 2) { busy = YES; last = now; dispatch_async(dispatch_get_global_queue(0, 0), ^{ [unDaemon() focusWithReply: ^(BOOL on) { unFocus = on; busy = NO; }]; }); }
+		return unFocus ? @"com.apple.donotdisturb.mode.default" : nil;
+	}
 	id s = dndService(); NSError *e = nil;
 	id a = ((id (*)(id, SEL, NSError **))objc_msgSend)(s, sel_registerName("activeModeAssertionWithError:"), &e); if (!a) return nil;
 	id d = ((id (*)(id, SEL))objc_msgSend)(a, sel_registerName("details")); return d ? ((id (*)(id, SEL))objc_msgSend)(d, sel_registerName("modeIdentifier")) : nil;

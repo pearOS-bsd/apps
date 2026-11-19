@@ -1,5 +1,7 @@
 #include <dlfcn.h>
 #import "CCPanel.h"
+#include <fcntl.h>
+#include <unistd.h>
 #import "CCSkyLight.h"
 #import "CCDraw.h"
 #import "CCGlass.h"
@@ -17,6 +19,10 @@ static const CGFloat kPanelY = 34, kPanelW = 308;
 static CGRect editPill(CGRect panel) { return CGRectMake(1072 + CCDX(), CGRectGetMaxY(panel) - 33, 96, 24); }          /* "Edit Controls": 502..525 in a panel ending at 533 */
 
 /* CC_STAGES=1: each stage of show() sends a harmless request to the window server (a different getter at each stage), so that the log of the Mach bridge shows how far the program got when it waits for something that never comes (stderr is not visible on pearOS) */
+static void ccTraceTile(NSUInteger i, int kind, int end)         /* CC_TRACE=1: the start and the end of the drawing of each tile (where a pass stops) */
+{
+	if (!getenv("CC_TRACE")) return; int fd = open("/Users/alex/cc-fill.txt", O_WRONLY | O_CREAT | O_APPEND, 0644); if (fd >= 0) { dprintf(fd, "%.3f tile %lu kind %d %s\n", CFAbsoluteTimeGetCurrent() - 800000000, (unsigned long)i, kind, end ? "done" : "start"); close(fd); }
+}
 static void ccTrace(const char *s)
 {
 	static const char *stages[] = { "show: begin", "show: window", "show: layers", "show: applied", "show: root", "show: shown", "show: opened" };
@@ -26,7 +32,7 @@ static void ccTrace(const char *s)
 }
 @implementation CCPanel
 {
-	DockWindow *win; CALayer *editGlass; NSMutableDictionary<NSNumber *, NSValue *> *oldFrames; CCControl *resizing; CALayer *layer, *baseLayer, *tileLayer, *glassLayer; NSMutableArray<CALayer *> *glassTiles; NSMutableArray<CALayer *> *tiles; NSMutableArray<CCControl *> *tileOwners; CCControl *hovered; NSUInteger tileGeneration; BOOL editing; CCGallery *gallery;
+	DockWindow *win; NSMutableArray<NSString *> *tileSigs; BOOL fillBusy, fillPending, fillPendingFade; NSString *lastSignature; CALayer *editGlass; NSMutableDictionary<NSNumber *, NSValue *> *oldFrames; CCControl *resizing; CALayer *layer, *baseLayer, *tileLayer, *glassLayer; NSMutableArray<CALayer *> *glassTiles; NSMutableArray<CALayer *> *tiles; NSMutableArray<CCControl *> *tileOwners; CCControl *hovered; NSUInteger tileGeneration; BOOL editing; CCGallery *gallery;
 	CCKind pageKind; BOOL hasPage; CGFloat pageX; NSArray<CCRow *> *pageRows; CCControl *pressed; CGPoint pressPoint; BOOL moved; CCControl *dragSlider; NSTimer *poll;
 }
 - (BOOL)visible { return win != nil; }
@@ -126,6 +132,13 @@ static void ccTrace(const char *s)
 }
 static const CGFloat kTilePad = 4;
 - (CGRect)tileFrame:(CCControl *)ct { CGRect f = CGRectInset([ct frame], -kTilePad, -kTilePad); return CGRectMake(f.origin.x - kWindow.origin.x, kWindow.size.height - (f.origin.y - kWindow.origin.y) - f.size.height, f.size.width, f.size.height); }
+- (NSString *)tileSignature:(CCControl *)c dark:(BOOL)dark
+{
+	NSMutableString *s = [NSMutableString stringWithFormat: @"%d|%d|%d|%d|%d|%@", dark, editing, c.kind, CCIsOn(c.kind), c.cw * 10 + c.ch, CCStateText(c.kind) ?: @""];
+	if (c.kind == CCDisplay || c.kind == CCSound || c.kind == CCKeyboardBrightness) [s appendFormat: @"|%.3f", CCSliderGet(c.kind)];
+	if (c.kind == CCNowPlaying) [s appendFormat: @"|%@|%@|%d", CCNowPlayingTitle() ?: @"", CCNowPlayingArtist() ?: @"", CCNowPlayingIsPlaying()];
+	return s;
+}
 - (CGImageRef)newTileImage:(CCControl *)ct dark:(BOOL)dark
 {
 	CCSetDarkInk(CCGlassMode() && !dark);
@@ -136,15 +149,27 @@ static const CGFloat kTilePad = 4;
 	return CCEndBitmap(c);
 }
 /* The tiles are drawn one per run-loop turn after the panel is shown (a slow or blocking control does not hold the whole panel back); a newer redraw cancels the older one */
+/* pearOS: the commits of the tiles are Mach messages to the render server's port, whose queue holds about ten: sixteen commits in a few milliseconds lost the last ones.  The next tile waits 30 ms there (CC_NO_SYSTEM_SERVICES marks the pearOS run); on a Mac it is the next run-loop turn */
+- (void)afterTile:(void (^)(void))next
+{
+	if (getenv("CC_NO_SYSTEM_SERVICES")) dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(0.03 * NSEC_PER_SEC)), dispatch_get_main_queue(), next); else dispatch_async(dispatch_get_main_queue(), next);
+}
 - (void)fillTile:(NSUInteger)i generation:(NSUInteger)gen fade:(BOOL)fade dark:(BOOL)dark
 {
-	if (!win || gen != tileGeneration || i >= tileOwners.count) return;
-	CCControl *ct = tileOwners[i]; CALayer *l = tiles[i]; CGImageRef img = [self newTileImage: ct dark: dark];
+	if (!win || gen != tileGeneration) { fillBusy = NO; return; }
+	if (i >= tileOwners.count) {                                                      /* the pass is done; a redraw asked for meanwhile runs now, once */
+		fillBusy = NO; if (fillPending) { fillPending = NO; [self startFill: fillPendingFade dark: CCDarkTheme()]; } return; }
+	NSUInteger ri = getenv("CC_FILL_REVERSE") ? tileOwners.count - 1 - i : i; CCControl *ct = tileOwners[ri]; CALayer *l = tiles[ri];
+	NSString *tsig = [self tileSignature: ct dark: dark];                              /* a tile whose picture would be the same is not drawn and not sent again (every picture is an image in the commit; redrawing all of them every second filled the render server's table with stale ones) */
+	if (l.contents && ri < tileSigs.count && [tsig isEqualToString: tileSigs[ri]]) { [CATransaction begin]; [CATransaction setDisableActions: YES]; l.frame = [self tileFrame: ct]; [CATransaction commit];
+		__weak CCPanel *ws = self; dispatch_async(dispatch_get_main_queue(), ^{ [ws fillTile: i + 1 generation: gen fade: fade dark: dark]; }); return; }
+	while (tileSigs.count <= ri) [tileSigs addObject: @""]; tileSigs[ri] = tsig;
+	ccTraceTile(i, ct.kind, 0); CGImageRef img = [self newTileImage: ct dark: dark]; ccTraceTile(i, ct.kind, 1);
 	[CATransaction begin]; [CATransaction setDisableActions: YES];
 	l.frame = [self tileFrame: ct];
 	if (fade && l.contents) { CATransition *t = [CATransition animation]; t.type = kCATransitionFade; t.duration = 0.15; t.timingFunction = [CAMediaTimingFunction functionWithName: kCAMediaTimingFunctionEaseInEaseOut]; [l addAnimation: t forKey: @"contents-fade"]; }
 	l.contents = (__bridge id)img; CGImageRelease(img); [CATransaction commit]; [CATransaction flush];
-	__weak CCPanel *w = self; dispatch_async(dispatch_get_main_queue(), ^{ [w fillTile: i + 1 generation: gen fade: fade dark: dark]; });
+	__weak CCPanel *w = self; [self afterTile: ^{ [w fillTile: i + 1 generation: gen fade: fade dark: dark]; }];
 }
 - (void)syncTiles:(BOOL)fade dark:(BOOL)dark
 {
@@ -153,7 +178,7 @@ static const CGFloat kTilePad = 4;
 	for (NSUInteger i = 0; same && i < cs.count; i++) if (tileOwners[i] != cs[i]) same = NO;
 	[CATransaction begin]; [CATransaction setDisableActions: YES];
 	if (!same) {
-		for (CALayer *l in tiles) [l removeFromSuperlayer]; tiles = [NSMutableArray array]; tileOwners = [NSMutableArray array]; hovered = nil;
+		for (CALayer *l in tiles) [l removeFromSuperlayer]; tiles = [NSMutableArray array]; tileOwners = [NSMutableArray array]; tileSigs = [NSMutableArray array]; hovered = nil;
 		for (CALayer *g in glassTiles) [g removeFromSuperlayer]; glassTiles = [NSMutableArray array];
 		for (CCControl *ct in cs) {
 			CALayer *l = [CALayer layer]; l.contentsGravity = kCAGravityResize; l.frame = [self tileFrame: ct]; [tileLayer addSublayer: l]; [tiles addObject: l]; [tileOwners addObject: ct];
@@ -172,12 +197,19 @@ static const CGFloat kTilePad = 4;
 	}
 	oldFrames = nil;
 	[CATransaction commit];
-	tileGeneration++; NSUInteger gen = tileGeneration; __weak CCPanel *w = self;
-	dispatch_async(dispatch_get_main_queue(), ^{ [w fillTile: 0 generation: gen fade: fade && same dark: dark]; });
+	if (fillBusy) { fillPending = YES; fillPendingFade = fade && same; return; }          /* a pass is running: it is not restarted (every restart began at the first tile again and a slow pass never reached the last ones) */
+	[self startFill: fade && same dark: dark];
+}
+- (void)startFill:(BOOL)fade dark:(BOOL)dark
+{
+	fillBusy = YES; tileGeneration++; NSUInteger gen = tileGeneration; __weak CCPanel *w = self;
+	void (^go)(void) = ^{ [w fillTile: 0 generation: gen fade: fade dark: dark]; };
+	if (getenv("CC_NO_SYSTEM_SERVICES")) dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(0.25 * NSEC_PER_SEC)), dispatch_get_main_queue(), go); else dispatch_async(dispatch_get_main_queue(), go);       /* pearOS: after the commit of the rebuilt layers has been taken (see afterTile) */
 }
 - (void)applyFading:(BOOL)fade
 {
 	if (!win) return;
+	if (getenv("CC_NO_SYSTEM_SERVICES")) fade = NO;           /* pearOS: the render server skips the CATransition of the fade ("animation skipped") and the records after it in the same commit were lost: the tiles after the tenth kept their old pictures */
 	CGImageRef img = [self newImage]; CCSetBandedContentsFade(baseLayer, img, 32, fade); CGImageRelease(img);
 	tileLayer.hidden = hasPage; if (!hasPage && !getenv("CC_NOTILES")) [self syncTiles: fade dark: CCDarkTheme()];
 	[CATransaction flush]; [gallery redraw];
@@ -204,6 +236,18 @@ static const CGFloat kTilePad = 4;
 	oldFrames = [NSMutableDictionary dictionary]; for (NSUInteger i = 0; i < tileOwners.count; i++) oldFrames[@((NSUInteger)(__bridge void *)tileOwners[i])] = ({ CGRect fr = tiles[i].frame; [NSValue valueWithBytes: &fr objCType: @encode(CGRect)]; });
 	tileOwners = nil; [self redraw];
 }
+/* the states change outside (appearance, preferences, the player): redraw only when what is drawn would change, so that the one-tile-per-turn fill is not restarted every second (on pearOS it takes seconds) */
+- (NSString *)stateSignature
+{
+	NSMutableString *s = [NSMutableString stringWithFormat: @"%d|%d|", CCDarkTheme(), editing]; if (hasPage) [s appendFormat: @"page%d", pageKind];
+	for (CCControl *c in [CCLayout shared].controls) {
+		[s appendFormat: @"%d:%d:%d:%@", c.kind, CCIsOn(c.kind), c.cw * 10 + c.ch, CCStateText(c.kind) ?: @""];
+		if (c.kind == CCDisplay || c.kind == CCSound || c.kind == CCKeyboardBrightness) [s appendFormat: @"%.3f", CCSliderGet(c.kind)];
+		if (c.kind == CCNowPlaying) [s appendFormat: @"%@%@%d", CCNowPlayingTitle() ?: @"", CCNowPlayingArtist() ?: @"", CCNowPlayingIsPlaying()];
+	}
+	return s;
+}
+- (void)pollState { if (!win) return; NSString *sig = [self stateSignature]; if ([sig isEqualToString: lastSignature]) return; lastSignature = sig; [self redraw]; }
 - (void)redrawFading { [self applyFading: YES]; }
 - (void)redraw { [self applyFading: NO]; }
 
@@ -236,6 +280,7 @@ static const CGFloat kTilePad = 4;
 - (void)show
 {
 	const SkyLightAPI *sl = SkyLightLoad(); const CCSkyLight *cc = CCSkyLightLoad(); if (!sl) return;
+	fillBusy = NO; fillPending = NO; lastSignature = nil;
 	ccTrace("show: begin"); win = [[DockWindow alloc] initWithFrame: kWindow level: 22 options: 0x10000]; ccTrace(win ? "show: window" : "show: NO window");
 	if (!win) { NSLog(@"cc: panel window not created"); return; }
 	layer = [CALayer layer]; layer.frame = CGRectMake(0, 0, kWindow.size.width, kWindow.size.height);
@@ -246,7 +291,7 @@ static const CGFloat kTilePad = 4;
 	if (cc->SetWindowClientPerceivedType) cc->SetWindowClientPerceivedType(sl->MainConnectionID(), win.windowID, 5);
 	CCShowWindow(win, 22); ccTrace("show: shown");
 	[self animateOpen]; ccTrace("show: opened");
-	__weak CCPanel *w = self; poll = [NSTimer scheduledTimerWithTimeInterval: 1 repeats: YES block: ^(NSTimer *t) { (void)t; [w redraw]; }];       /* states change outside (appearance, preferences) */
+	__weak CCPanel *w = self; poll = [NSTimer scheduledTimerWithTimeInterval: 1 repeats: YES block: ^(NSTimer *t) { (void)t; [w pollState]; }];       /* states change outside (appearance, preferences) */
 }
 - (void)hide
 {

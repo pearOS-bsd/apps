@@ -86,3 +86,11 @@ Update (same day): the lit rim (`CASDFKeyFillHighlightEffect`: key light angle 0
 Clicks and hover reach the panel now. The chain: WindowServer pushes the tap data as a notification on the event channel of the tapping client (`sls_tap.c`); the real CoreGraphics of the Mac wants it as a `CGYEventTap` message (id 1, PostEventTapData) on the *tap's own port* (the descriptor of PlaceTap, 32028 / 32029). `wsbridge` keeps that port per client (`tap port` in its log) and turns each `WSD_NOTE_TAP_DATA` notification into that message (`tap data to port ... kr 0`). Tested by `wsclick` on "Edit Controls": the panel enters edit mode (gallery on the left, remove badges, resize handles).
 Open: in edit mode the tiles are redrawn one per run-loop turn and some of the images arrive garbled or stale (stripes, the picture of another tile) and slowly (the 1 s poll timer restarts the chain); resize and rearrange are written (sizes of the real Edit Controls, spring glide on a move) but not verified on pearOS for that reason.
 `CC_LAYOUT=real` gives the layout of the real panel captured on the Mac for the side-by-side (`pearos/side-by-side-real.png`).
+
+## Edit Controls on pearOS: resize and rearrange work (2026-11-19)
+Tested with `wsclick` on "Edit Controls", then `wsdrag` on the resize handle of the Battery tile (2x1 -> 1x1: the tile shrinks, the empty slot appears) and on the tile itself (moved to the free cell).  Found on the way:
+- The tiles after the tenth did not get their edit-mode picture: each tile is a commit (a Mach message to the render server's port) and sixteen in a few milliseconds overflowed the port's queue.  The fill waits 30 ms per tile when `CC_NO_SYSTEM_SERVICES` is set (the pearOS run), 250 ms after a rebuild of the layers.
+- The 1 s poll restarted the fill pass every second and re-sent every picture: it redraws only when the state signature changes now, a tile is redrawn only when its own signature changes, a running pass is not restarted (one pending pass runs after it).
+- A move with a button down is now a drag (`kCGEventLeftMouseDragged`) in the tap data of WindowServer (it was always a move: no drag reached the panel).
+- The Focus question to usernoted runs on a background queue (at most every 2 s).
+- The CATransition fade is off on pearOS (the render server skips it: "animation skipped").
