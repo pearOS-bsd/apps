@@ -61,6 +61,12 @@ CGRect CCCellRect(int col, int row, int w, int h) { return CGRectMake(round(kX0 
 	_controls = [NSMutableArray array];
 	static const struct { CCKind k; int c, r; } d[] = { {CCWifi,0,0}, {CCBluetooth,0,1}, {CCAirDrop,0,2}, {CCNowPlaying,2,0}, {CCStageManager,2,2}, {CCScreenMirroring,3,2}, {CCDarkMode,0,3}, {CCScreenshot,1,3}, {CCFocus,2,3}, {CCDisplay,0,4}, {CCSound,0,5} };
 	for (size_t i = 0; i < sizeof d / sizeof *d; i++) { CCControl *c = [CCControl new]; c.kind = d[i].k; c.col = d[i].c; c.row = d[i].r; [_controls addObject: c]; }
+	if (getenv("CC_LAYOUT") && !strcmp(getenv("CC_LAYOUT"), "real")) {       /* the layout of the real panel captured on the Mac (Solarium captures/27.0-arm64-cc-real), for the side-by-side: kinds the catalog lacks are replaced by the nearest */
+		static const struct { CCKind k; int c, r, w, h; } t[] = { {CCWifi,0,0,1,1}, {CCBluetooth,1,0,1,1}, {CCNowPlaying,2,0,2,2}, {CCDarkMode,0,1,1,1}, {CCAlarm,1,1,1,1}, {CCAirDrop,0,2,2,1}, {CCStageManager,2,2,1,1}, {CCScreenMirroring,3,2,1,1},
+			{CCStopwatch,0,3,1,1}, {CCScreenshot,1,3,1,1}, {CCFocus,2,3,2,1}, {CCSound,0,4,4,1}, {CCDisplay,1,5,2,1}, {CCScreenSaver,0,6,2,2}, {CCKeyboardBrightness,2,6,2,1}, {CCBattery,2,7,2,1} };
+		_controls = [NSMutableArray array];
+		for (size_t i = 0; i < sizeof t / sizeof *t; i++) { CCControl *c = [CCControl new]; c.kind = t[i].k; c.col = t[i].c; c.row = t[i].r; const CCCatalogEntry *e = CCCatalogFor(t[i].k); c.w = t[i].w == e->w ? 0 : t[i].w; c.h = t[i].h == e->h ? 0 : t[i].h; [_controls addObject: c]; }
+	}
 }
 - (void)load
 {

@@ -52,7 +52,7 @@ static void ccTrace(const char *s)
 	switch (ct.kind) {
 	case CCDisplay: case CCSound: case CCKeyboardBrightness: {
 		BOOL wide = cw == 4, disp = ct.kind != CCSound; CGFloat x0, x1; CCSliderRange(ct, &x0, &x1);
-		CCText(c, [NSString stringWithUTF8String: e->title], r.origin.x + (wide ? 16 : 18), r.origin.y + (ct.kind == CCDisplay ? 23 : 22), 13, YES, 255, 0);
+		CCText(c, (ct.kind == CCKeyboardBrightness && !wide) ? @"Keyboard" : [NSString stringWithUTF8String: e->title], r.origin.x + (wide ? 16 : 18), r.origin.y + (ct.kind == CCDisplay ? 23 : 22), 13, YES, 255, 0);
 		CGFloat y = r.origin.y + (ct.kind == CCDisplay ? 43 : 42);
 		CCFillRRect(c, CGRectMake(x0, y - 2, x1 - x0, 4), 2, 150);
 		double v = CCSliderGet(ct.kind); if (v > 0.001) { CCFillRRect(c, CGRectMake(x0, y - 2, (x1 - x0) * v, 4), 2, 235); CCFillDisc(c, CGPointMake(x0 + (x1 - x0) * v, y), 14, 255); }

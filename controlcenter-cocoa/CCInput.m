@@ -11,6 +11,7 @@ static CGEventRef onEvent(CGEventTapProxy proxy, CGEventType type, CGEventRef ev
 	CCInput *self = (__bridge CCInput *)ref; CCPanel *panel = self->panel;
 	if (type == kCGEventTapDisabledByTimeout || type == kCGEventTapDisabledByUserInput) { CGEventTapEnable(self->tap, true); return ev; }
 	CGPoint p = CGEventGetLocation(ev);
+	if (getenv("CC_TRACE")) { static int n; if (n < 40) { n++; int fd = open("/Users/alex/cc-ev.txt", O_WRONLY | O_CREAT | O_APPEND, 0644); if (fd >= 0) { dprintf(fd, "event type %d at %.0f,%.0f\n", (int)type, p.x, p.y); close(fd); } } }
 	if (type == kCGEventLeftMouseDown) {
 		CCKind ek; CGFloat mid; if (self->bar && [[self->bar extras] kindAtPoint: p kind: &ek midX: &mid]) { self->swallowUp = YES; dispatch_async(dispatch_get_main_queue(), ^{ [panel toggleExtra: ek atX: mid]; }); return NULL; }
 		if (CGRectContainsPoint(self->item, p)) { self->swallowUp = YES; dispatch_async(dispatch_get_main_queue(), ^{ [panel toggle]; }); return NULL; }
