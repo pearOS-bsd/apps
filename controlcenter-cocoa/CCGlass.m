@@ -24,7 +24,7 @@ CALayer *CCGlassLayer(CGRect frame, CGFloat radius)
 	CGRect b = CGRectMake(0, 0, frame.size.width, frame.size.height);
 	CALayer *container = [CALayer layer]; container.frame = frame;
 	CALayer *backdrop = [Back layer]; backdrop.frame = b;
-	id gf = [Filter filterWithType: @"glassBackground"]; setKeys(gf, MIN(frame.size.width, frame.size.height) < 160); backdrop.filters = @[ gf ];
+	id gf = [(id)Filter performSelector: NSSelectorFromString(@"filterWithType:") withObject: @"glassBackground"]; setKeys(gf, MIN(frame.size.width, frame.size.height) < 160); backdrop.filters = @[ gf ];
 	[(id)backdrop setValue: @YES forKey: @"windowServerAware"];
 	CALayer *sdf = [SDF layer]; sdf.frame = b; id eff = [[Out alloc] init]; [eff setValue: @-10000 forKey: @"minimum"]; [eff setValue: @39.83030308810147 forKey: @"maximum"];
 	[sdf setValue: eff forKey: @"effect"]; [sdf setValue: @8 forKey: @"smoothness"]; [sdf setValue: @0 forKey: @"gaussianRadius"];
