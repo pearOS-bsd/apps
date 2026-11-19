@@ -149,3 +149,10 @@ CASpringAnimation *CCRawSpring(NSString *keyPath, double mass, double stiffness,
 {
 	CASpringAnimation *a = [CASpringAnimation animationWithKeyPath: keyPath]; a.mass = mass; a.stiffness = stiffness; a.damping = damping; a.initialVelocity = 0; a.duration = a.settlingDuration; return a;
 }
+
+CGFloat CCDX(void)
+{
+	static CGFloat dx = -1; if (dx >= 0) return dx;
+	if (getenv("CC_DX")) return dx = atof(getenv("CC_DX"));
+	CGRect b = CGDisplayBounds(CGMainDisplayID()); dx = b.size.width > 1280 ? b.size.width - 1280 : 0; return dx;
+}

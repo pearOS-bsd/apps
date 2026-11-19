@@ -8,10 +8,11 @@
 
 NSString *const CCEditModeChanged = @"CCEditModeChanged";
 /* window of the real panel: 800,0 656 x 964 (level 22; larger than the panel: room for the shadow, partly off screen); the panel x 966..1274, from y 34 */
-static const CGRect kWindow = { {800, 0}, {656, 964} };
-static const CGFloat kPanelX = 966, kPanelY = 34, kPanelW = 308;
+#define kWindow CGRectMake(800 + CCDX(), 0, 656, 964)
+#define kPanelX (966 + CCDX())
+static const CGFloat kPanelY = 34, kPanelW = 308;
 
-static CGRect editPill(CGRect panel) { return CGRectMake(1074, CGRectGetMaxY(panel) - 31, 93, 23); }          /* "Edit Controls": 502..525 in a panel ending at 533 */
+static CGRect editPill(CGRect panel) { return CGRectMake(1074 + CCDX(), CGRectGetMaxY(panel) - 31, 93, 23); }          /* "Edit Controls": 502..525 in a panel ending at 533 */
 
 static void ccTrace(const char *s) { if (!getenv("CC_TRACE")) return; write(2, "cc-trace: ", 10); write(2, s, strlen(s)); write(2, "\n", 1); }
 @implementation CCPanel
@@ -23,7 +24,7 @@ static void ccTrace(const char *s) { if (!getenv("CC_TRACE")) return; write(2, "
 - (BOOL)editing { return editing; }
 - (CGRect)panelRect
 {
-	if (hasPage) return CGRectMake(pageX ?: 964, 36, 308, 2 + pageRows.count * 40);
+	if (hasPage) return CGRectMake(pageX ?: 964 + CCDX(), 36, 308, 2 + pageRows.count * 40);
 	int rows = [CCLayout shared].rows; if (editing) rows = MIN(rows + 2, CCMaxRows());
 	CGFloat lastBottom = 42 + (rows - 1) * 76 + 63;
 	return CGRectMake(kPanelX, kPanelY, kPanelW, lastBottom + (editing ? 7 : 48) - kPanelY);
@@ -216,7 +217,7 @@ static const CGFloat kTilePad = 4;
 	if (win && hasPage && pageKind == k) { [self hide]; return; }
 	if (win) [self hide];
 	[self show]; pageKind = k; pageRows = CCPageRows(k); if (!pageRows) { [self hide]; return; }
-	hasPage = YES; pageX = MAX(8, MIN(1272 - 308, itemMidX - 154)); [self redraw];
+	hasPage = YES; pageX = MAX(8, MIN(1272 + CCDX() - 308, itemMidX - 154)); [self redraw];
 }
 - (void)toggle { if (win) [self hide]; else [self show]; }
 - (void)setEditing:(BOOL)on
@@ -272,7 +273,7 @@ static const CGFloat kTilePad = 4;
 	[self scaleTile: ct to: (hovered == ct ? 1.02 : 1) response: 0.25 damping: 0.75];
 	if (editing) {                                                                       /* drag a control to another cell */
 		if (moved) {                                                                    /* the control's top-left follows the pointer; the cell under its centre is the target */
-			CGRect f = [ct frame]; int col = (int)floor((f.origin.x + (p.x - pressPoint.x) - 974 + 31) / 76.33), row = (int)floor((f.origin.y + (p.y - pressPoint.y) - 42 + 31) / 76);
+			CGRect f = [ct frame]; int col = (int)floor((f.origin.x + (p.x - pressPoint.x) - 974 - CCDX() + 31) / 76.33), row = (int)floor((f.origin.y + (p.y - pressPoint.y) - 42 + 31) / 76);
 			[[CCLayout shared] moveControl: ct toCol: col row: row]; [self redraw];
 		}
 		return YES;

@@ -30,7 +30,8 @@ NSArray<NSString *> *CCCategories(void)
 }
 
 /* ---- grid: 4 columns, pitch measured on the real panel (x 974 1050 1127 1203, rows every 76, cell 63) ---- */
-static const CGFloat kX0 = 974, kY0 = 42, kPitchX = 76.33, kPitchY = 76, kCell = 63;
+#define kX0 (974 + CCDX())
+static const CGFloat kY0 = 42, kPitchX = 76.33, kPitchY = 76, kCell = 63;
 int CCMaxRows(void) { return 8; }
 CGRect CCCellRect(int col, int row, int w, int h) { return CGRectMake(round(kX0 + col * kPitchX), kY0 + row * kPitchY, round(w * kCell + (w - 1) * (kPitchX - kCell)), h * kCell + (h - 1) * (kPitchY - kCell)); }
 

@@ -26,3 +26,6 @@ void CCSetBandedContentsFade(CALayer *layer, CGImageRef img, int bandHeight, BOO
 CASpringAnimation *CCSwiftUISpring(NSString *keyPath, double response, double dampingFraction);
 
 CASpringAnimation *CCRawSpring(NSString *keyPath, double mass, double stiffness, double damping);     /* the parameters of SwiftUI's interpolatingSpring as they are */
+
+/* The geometry of the real ControlCenter was measured on a 1280 x 800 screen, at the right edge: on a wider screen everything on the right moves by this much (the main display's width - 1280; CC_DX overrides) */
+CGFloat CCDX(void);

@@ -6,7 +6,7 @@
 #import "../dock-cocoa/SkyLightAPI.h"
 #import <QuartzCore/QuartzCore.h>
 
-static const CGRect kFrame = { {226, 45}, {736, 670} };
+#define kFrame CGRectMake(226 + CCDX(), 45, 736, 670)
 static const int kSidebarW = 247, kFooterH = 55;
 static const int kIconRGB[16][3] = { {255,255,255}, {255,255,255}, {40,40,40}, {10,132,255}, {255,255,255}, {94,92,230}, {255,255,255}, {255,255,255}, {255,159,10}, {120,60,200}, {255,255,255}, {255,214,10}, {255,255,255}, {30,30,30}, {150,150,150}, {50,200,90} };
 typedef struct { CGRect r; int idx; } Hit;

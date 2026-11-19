@@ -11,7 +11,8 @@
 
 enum { ItemSpotlight, ItemControl, ItemClock };
 /* geometry of the real items on the 1280 x 800 Mac VM (CGWindowList): x, width; height 30 = the menu bar */
-static const CGRect kFrames[3] = { {1063, 0, 31, 30}, {1094, 0, 42, 30}, {1136, 0, 144, 30} };
+static const CGRect kBase[3] = { {1063, 0, 31, 30}, {1094, 0, 42, 30}, {1136, 0, 144, 30} };
+#define kFrames ((CGRect[3]){ CGRectOffset(kBase[0], CCDX(), 0), CGRectOffset(kBase[1], CCDX(), 0), CGRectOffset(kBase[2], CCDX(), 0) })
 static const uint32_t kKeys[3] = { 0x7fffffd0, 0x7fffffe1, 0x7ffffff5 };       /* clock and Control Center: real values; Spotlight's guessed */
 
 static BOOL themeIsDark(void)
@@ -69,7 +70,7 @@ static CGImageRef render(int item, CGSize s)
 	const SkyLightAPI *sl = SkyLightLoad(); const CCSkyLight *cc = CCSkyLightLoad(); if (!sl) return;
 	if (![n.userInfo[@"editing"] boolValue]) { if (plusWin && sl->ReleaseWindow) sl->ReleaseWindow(sl->MainConnectionID(), plusWin.windowID); plusWin = nil; return; }
 	/* the "+" button of the real edit mode: window 1046,0 48 x 30 (level 25), light rounded rectangle with a dark plus */
-	CGRect f = CGRectMake(1046, 0, 48, 30); plusWin = [[DockWindow alloc] initWithFrame: f level: 25 options: 0x10000]; if (!plusWin) return;
+	CGRect f = CGRectMake(1046 + CCDX(), 0, 48, 30); plusWin = [[DockWindow alloc] initWithFrame: f level: 25 options: 0x10000]; if (!plusWin) return;
 	CGContextRef c = CCBeginBitmap(f.size, CGPointZero); CCFillRRect(c, CGRectMake(4, 3, 40, 24), 7, 244); CCFillGrey(c, 40, 1); CGContextSetLineWidth(c, 1.6); CCGlyph(c, @"plus", CGPointMake(24, 15), 18);
 	CALayer *l = [CALayer layer]; l.frame = CGRectMake(0, 0, f.size.width, f.size.height); CGImageRef img = CCEndBitmap(c); l.contents = (__bridge id)img; CGImageRelease(img); [plusWin setRootLayer: l];
 	int cid = sl->MainConnectionID(); uint32_t wid = plusWin.windowID; CFTypeRef tx = sl->TransactionCreate(cid);
