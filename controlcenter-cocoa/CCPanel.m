@@ -2,6 +2,7 @@
 #import "CCPanel.h"
 #import "CCSkyLight.h"
 #import "CCDraw.h"
+#import "CCGlass.h"
 #import "CCGallery.h"
 #import "../dock-cocoa/DockWindow.h"
 #import "../dock-cocoa/SkyLightAPI.h"
@@ -25,7 +26,7 @@ static void ccTrace(const char *s)
 }
 @implementation CCPanel
 {
-	DockWindow *win; CALayer *layer, *baseLayer, *tileLayer; NSMutableArray<CALayer *> *tiles; NSMutableArray<CCControl *> *tileOwners; CCControl *hovered; NSUInteger tileGeneration; BOOL editing; CCGallery *gallery;
+	DockWindow *win; CALayer *layer, *baseLayer, *tileLayer, *glassLayer; NSMutableArray<CALayer *> *glassTiles; NSMutableArray<CALayer *> *tiles; NSMutableArray<CCControl *> *tileOwners; CCControl *hovered; NSUInteger tileGeneration; BOOL editing; CCGallery *gallery;
 	CCKind pageKind; BOOL hasPage; CGFloat pageX; NSArray<CCRow *> *pageRows; CCControl *pressed; CGPoint pressPoint; BOOL moved; CCControl *dragSlider; NSTimer *poll;
 }
 - (BOOL)visible { return win != nil; }
@@ -45,7 +46,7 @@ static void ccTrace(const char *s)
 	const CCCatalogEntry *e = [ct entry]; CGRect r = [ct frame]; CGPoint ctr = CGPointMake(CGRectGetMidX(r), CGRectGetMidY(r));
 	BOOL on = CCIsOn(ct.kind), disc1 = e->w == 1 && e->h == 1; CGFloat radius = (e->h == 1 && e->w <= 2) ? 31.5 : 24;
 	BOOL whiteTile = disc1 && on;                                                 /* a switched-on one-cell toggle is a white disc with a dark glyph (the Dark Mode button of the real panel) */
-	if (CCGlassMode() && !whiteTile) CCFillRRectA(c, r, radius, dark ? 150 : 120, dark ? 0.32 : 0.30); else CCFillRRect(c, r, radius, whiteTile ? 255 : (dark ? 111 : 109));
+	if (CCGlassMode() && !whiteTile) CCFillRRectA(c, r, radius, dark ? 150 : 120, 0.10); else CCFillRRect(c, r, radius, whiteTile ? 255 : (dark ? 111 : 109));
 	CGFloat ink = whiteTile ? 0 : 255; CCFillGrey(c, ink, 1); CGContextSetLineWidth(c, 1.6);
 	switch (ct.kind) {
 	case CCDisplay: case CCSound: case CCKeyboardBrightness: {
@@ -106,7 +107,7 @@ static void ccTrace(const char *s)
 	BOOL dark = CCDarkTheme(); CGRect panel = [self panelRect];
 	CGContextRef c = CCBeginBitmap(kWindow.size, kWindow.origin);
 	if (hasPage) { [self drawPage: c in: panel dark: dark]; return CCEndBitmap(c); }
-	if (CCGlassMode()) CCFillRRectA(c, panel, 37, dark ? 40 : 235, dark ? 0.42 : 0.5); else CCFillRRect(c, panel, 37, dark ? (editing ? 58 : 61) : 219);
+	if (CCGlassMode()) CCFillRRectA(c, panel, 37, dark ? 40 : 235, 0.06); else CCFillRRect(c, panel, 37, dark ? (editing ? 58 : 61) : 219);
 	CCLayout *lay = [CCLayout shared];
 	if (editing) {
 		int rows = MIN(lay.rows + 2, CCMaxRows());
@@ -147,7 +148,11 @@ static const CGFloat kTilePad = 4;
 	[CATransaction begin]; [CATransaction setDisableActions: YES];
 	if (!same) {
 		for (CALayer *l in tiles) [l removeFromSuperlayer]; tiles = [NSMutableArray array]; tileOwners = [NSMutableArray array]; hovered = nil;
-		for (CCControl *ct in cs) { CALayer *l = [CALayer layer]; l.contentsGravity = kCAGravityResize; l.frame = [self tileFrame: ct]; [tileLayer addSublayer: l]; [tiles addObject: l]; [tileOwners addObject: ct]; }
+		for (CALayer *g in glassTiles) [g removeFromSuperlayer]; glassTiles = [NSMutableArray array];
+		for (CCControl *ct in cs) {
+			CALayer *l = [CALayer layer]; l.contentsGravity = kCAGravityResize; l.frame = [self tileFrame: ct]; [tileLayer addSublayer: l]; [tiles addObject: l]; [tileOwners addObject: ct];
+			if (CCGlassMode() && glassLayer) { CGRect f = CGRectInset([self tileFrame: ct], kTilePad, kTilePad); const CCCatalogEntry *e = [ct entry]; CALayer *g = CCGlassLayer(f, (e->h == 1 && e->w <= 2) ? 31.5 : 24); [glassLayer addSublayer: g ?: [CALayer layer]]; [glassTiles addObject: g ?: [CALayer layer]]; }
+		}
 	}
 	[CATransaction commit];
 	tileGeneration++; NSUInteger gen = tileGeneration; __weak CCPanel *w = self;
@@ -166,7 +171,9 @@ static const CGFloat kTilePad = 4;
 	NSUInteger i = ct ? [tileOwners indexOfObjectIdenticalTo: ct] : NSNotFound; if (i == NSNotFound) return; CALayer *l = tiles[i];
 	CATransform3D now = l.presentationLayer ? ((CALayer *)l.presentationLayer).transform : l.transform, to = CATransform3DMakeScale(s, s, 1);
 	CASpringAnimation *a = CCSwiftUISpring(@"transform", r, z); a.fromValue = [NSValue valueWithCATransform3D: now]; a.toValue = [NSValue valueWithCATransform3D: to];
-	[CATransaction begin]; [CATransaction setDisableActions: YES]; l.transform = to; [CATransaction commit]; [l addAnimation: a forKey: @"scale"]; [CATransaction flush];
+	[CATransaction begin]; [CATransaction setDisableActions: YES]; l.transform = to; [CATransaction commit]; [l addAnimation: a forKey: @"scale"];
+	if (i < glassTiles.count) { CALayer *g = glassTiles[i]; [CATransaction begin]; [CATransaction setDisableActions: YES]; g.transform = to; [CATransaction commit]; [g addAnimation: [a copy] forKey: @"scale"]; }
+	[CATransaction flush];
 }
 - (void)hoverAt:(CGPoint)p
 {
@@ -197,15 +204,12 @@ static const CGFloat kTilePad = 4;
 	CASpringAnimation *sp = [CASpringAnimation animationWithKeyPath: @"transform"]; sp.mass = 2; sp.stiffness = 300; sp.damping = 50; sp.duration = sp.settlingDuration;
 	sp.fromValue = [NSValue valueWithCATransform3D: from]; sp.toValue = [NSValue valueWithCATransform3D: CATransform3DIdentity]; [layer addAnimation: sp forKey: @"page-scale"]; [CATransaction flush];
 }
-/* The real panel is Liquid Glass: a CABackdropLayer (the window server samples what is behind the window) with a gaussian blur, under the content.  The class and CAFilter are private; on a Mac without a GPU the backdrop shows flat. */
+/* The glass of the real panel: Liquid Glass layers (CCGlass.m, the tree of NSGlassEffectView), one for the panel and one for each control, under the drawn content.  glassTiles is parallel to tiles. */
 - (void)addBackdrop
 {
-	Class B = NSClassFromString(@"CABackdropLayer"), F = NSClassFromString(@"CAFilter"); if (!B || !F) return;
-	CALayer *bd = [B layer]; CGRect pr = [self panelRect];
-	bd.frame = CGRectMake(pr.origin.x - kWindow.origin.x, kWindow.size.height - (pr.origin.y - kWindow.origin.y) - pr.size.height, pr.size.width, pr.size.height); bd.cornerRadius = 37; bd.masksToBounds = YES;
-	id blur = [F filterWithType: @"gaussianBlur"]; [blur setValue: @30 forKey: @"inputRadius"]; [blur setValue: @YES forKey: @"inputNormalizeEdges"];
-	[bd setValue: @[ blur ] forKey: @"filters"]; [bd setValue: @YES forKey: @"windowServerAware"]; [bd setValue: @"pearos.cc.glass" forKey: @"groupName"]; [bd setValue: @1.0 forKey: @"scale"];
-	[layer addSublayer: bd];
+	glassLayer = [CALayer layer]; glassLayer.frame = layer.bounds; [layer addSublayer: glassLayer];
+	CGRect pr = [self panelRect]; CALayer *g = CCGlassLayer(CGRectMake(pr.origin.x - kWindow.origin.x, kWindow.size.height - (pr.origin.y - kWindow.origin.y) - pr.size.height, pr.size.width, pr.size.height), 37);
+	if (g) [glassLayer addSublayer: g];
 }
 - (void)show
 {
@@ -219,7 +223,6 @@ static const CGFloat kTilePad = 4;
 	[win setRootLayer: layer]; ccTrace("show: root");
 	if (cc->SetWindowClientPerceivedType) cc->SetWindowClientPerceivedType(sl->MainConnectionID(), win.windowID, 5);
 	CCShowWindow(win, 22); ccTrace("show: shown");
-	if (CCGlassMode()) { static int (*blur)(int, uint32_t, int); if (!blur) blur = dlsym(RTLD_DEFAULT, "SLSSetWindowBackgroundBlurRadius"); if (blur) blur(sl->MainConnectionID(), win.windowID, 30); }
 	[self animateOpen]; ccTrace("show: opened");
 	__weak CCPanel *w = self; poll = [NSTimer scheduledTimerWithTimeInterval: 1 repeats: YES block: ^(NSTimer *t) { (void)t; [w redraw]; }];       /* states change outside (appearance, preferences) */
 }
