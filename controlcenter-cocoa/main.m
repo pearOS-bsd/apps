@@ -18,7 +18,7 @@ int main(int argc, const char *argv[])
 		CCStatusBar *bar = [CCStatusBar new]; [bar start];
 		CCPanel *panel = [CCPanel new]; CCInput *input = [[CCInput alloc] initWithPanel: panel controlItemFrame: CGRectMake(1094 + CCDX(), 0, 42, 30) statusBar: bar]; (void)input;
 		CCNowPlayingStart();
-		if (getenv("CC_OPEN")) dispatch_after(dispatch_time(DISPATCH_TIME_NOW, 3 * NSEC_PER_SEC), dispatch_get_main_queue(), ^{ [panel toggle]; });       /* test switch: open the panel 3 s after the start, from the run loop (before it, its commit did not always reach the render server on pearOS) */
+		if (getenv("CC_OPEN")) [NSTimer scheduledTimerWithTimeInterval: 3 repeats: NO block: ^(NSTimer *t) { (void)t; [panel toggle]; }];       /* test switch: open the panel 3 s after the start, from the run loop (before it, its commit did not always reach the render server on pearOS) */
 		if (getenv("CC_WINDOW")) { for (double t = 0; t < atof(getenv("CC_WINDOW")); t += 0.1) [[NSRunLoop currentRunLoop] runUntilDate: [NSDate dateWithTimeIntervalSinceNow: 0.1]]; }
 		else [[NSRunLoop currentRunLoop] run];
 		(void)argc; (void)argv;

@@ -39,7 +39,7 @@ static CGEventRef onEvent(CGEventTapProxy proxy, CGEventType type, CGEventRef ev
 	panel = p; item = f; bar = b;     /* CC_LISTEN_ONLY=1 (pearOS: WindowServer serves listen-only taps; the events that the panel uses are then not swallowed) */
 	CGEventMask m = (getenv("CC_NO_HOVER") ? 0 : CGEventMaskBit(kCGEventMouseMoved)) | CGEventMaskBit(kCGEventLeftMouseDown) | CGEventMaskBit(kCGEventLeftMouseUp) | CGEventMaskBit(kCGEventLeftMouseDragged) | CGEventMaskBit(kCGEventScrollWheel) | CGEventMaskBit(kCGEventKeyDown);
 	tap = CGEventTapCreate(kCGSessionEventTap, kCGHeadInsertEventTap, getenv("CC_LISTEN_ONLY") ? kCGEventTapOptionListenOnly : kCGEventTapOptionDefault, m, onEvent, (__bridge void *)self);
-	if (getenv("CC_TRACE")) { int fd = open("/Users/alex/cc-tap.txt", O_WRONLY | O_CREAT | O_TRUNC, 0644); if (fd >= 0) { dprintf(fd, "tap=%p trusted=%d listen=%d post=%d\n", (void *)tap, AXIsProcessTrusted(), CGPreflightListenEventAccess(), CGPreflightPostEventAccess()); close(fd); } }
+	if (getenv("CC_TRACE")) { int fd = open("/Users/alex/cc-tap.txt", O_WRONLY | O_CREAT | O_TRUNC, 0644); if (fd >= 0) { dprintf(fd, "tap=%p\n", (void *)tap); close(fd); } }       /* not AXIsProcessTrusted / CGPreflight...: those ask tccd through the bridge and the main thread could wait for ever */
 	if (!tap) { NSLog(@"cc: no event tap (AXIsProcessTrusted %d, listen %d, post %d)", AXIsProcessTrusted(), CGPreflightListenEventAccess(), CGPreflightPostEventAccess()); return self; }
 	CFRunLoopSourceRef src = CFMachPortCreateRunLoopSource(NULL, tap, 0); CFRunLoopAddSource(CFRunLoopGetMain(), src, kCFRunLoopCommonModes); CFRelease(src); CGEventTapEnable(tap, true);
 	return self;

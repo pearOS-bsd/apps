@@ -11,7 +11,8 @@
 #import <Foundation/Foundation.h>
 #import "CCControls.h"
 @interface CCBento : NSObject
-+ (instancetype)load;                                       /* nil when there is no such layout (then the old preference of ours is used) */
++ (instancetype)load;
++ (instancetype)blank;                                        /* no file yet: an empty layout in the real format; the first save creates the file */                                       /* nil when there is no such layout (then the old preference of ours is used) */
 @property (readonly) NSArray<CCControl *> *controls;        /* the placed controls, with instanceId, kind, col, row, w, h */
 - (void)saveControls:(NSArray<CCControl *> *)controls;      /* writes the grid, the instances and the sizes of the chrono controls back */
 @end

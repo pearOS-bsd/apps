@@ -1,5 +1,9 @@
 #include <string.h>
+#include <fcntl.h>
+#include <unistd.h>
+static void bt(const char *fmt, long a, long b2) { if (!getenv("CC_TRACE")) return; int fd = open("/Users/alex/cc-save.txt", O_WRONLY | O_CREAT | O_APPEND, 0644); if (fd >= 0) { dprintf(fd, fmt, a, b2); dprintf(fd, "\n"); close(fd); } }
 #import "CCBento.h"
+#import "CCChrono.h"
 
 static NSString *const kBoxesDomain = @"com.apple.controlcenter.bentoboxes", *const kMainDomain = @"com.apple.controlcenter", *const kChronoKey = @"ControlCenterDisplayableChronoControlsProviderConfiguration";
 
@@ -14,6 +18,25 @@ static NSString *prefFile(NSString *domain, BOOL byHost)
 }
 static NSMutableDictionary *readFile(NSString *path) { NSData *d = path ? [NSData dataWithContentsOfFile: path] : nil; if (!d) return nil; id o = [NSPropertyListSerialization propertyListWithData: d options: NSPropertyListMutableContainers format: NULL error: NULL]; return [o isKindOfClass: [NSMutableDictionary class]] ? o : nil; }
 
+/* the archived identity of a chrono control, as the real one writes it: a keyed archive of CHSControlIdentity { intentRef, kind, extId = CHSExtensionIdentity { deviceIdentifier, containerBundleIdentifier, extensionBundleIdentifier } }.
+ * Two classes of ours stand for them (NSKeyedArchiver writes the names given by setClassName:forClass:, so the archive says CHSControlIdentity / CHSExtensionIdentity). */
+@interface CCExtIdentity : NSObject <NSCoding> { @public NSString *container, *extension; } @end
+@implementation CCExtIdentity
+- (void)encodeWithCoder:(NSCoder *)c { [c encodeObject: nil forKey: @"deviceIdentifier"]; [c encodeObject: container forKey: @"containerBundleIdentifier"]; [c encodeObject: extension forKey: @"extensionBundleIdentifier"]; }
+- (instancetype)initWithCoder:(NSCoder *)c { return [super init]; }
+@end
+@interface CCCtlIdentity : NSObject <NSCoding> { @public NSString *kind; CCExtIdentity *ext; } @end
+@implementation CCCtlIdentity
+- (void)encodeWithCoder:(NSCoder *)c { [c encodeObject: nil forKey: @"intentRef"]; [c encodeObject: kind forKey: @"kind"]; [c encodeObject: ext forKey: @"extId"]; }
+- (instancetype)initWithCoder:(NSCoder *)c { return [super init]; }
+@end
+static NSString *b64encode(NSData *d);
+static NSString *identityArchive(NSString *kind, NSString *container, NSString *extension)
+{
+	[NSKeyedArchiver setClassName: @"CHSControlIdentity" forClass: [CCCtlIdentity class]]; [NSKeyedArchiver setClassName: @"CHSExtensionIdentity" forClass: [CCExtIdentity class]];
+	CCExtIdentity *e = [CCExtIdentity new]; e->container = container; e->extension = extension; CCCtlIdentity *i = [CCCtlIdentity new]; i->kind = kind; i->ext = e;
+	NSData *d = [NSKeyedArchiver archivedDataWithRootObject: i requiringSecureCoding: NO error: NULL]; return d ? b64encode(d) : nil;
+}
 @implementation CCBento
 {
 	NSMutableDictionary *boxFile, *mainFile;                   /* the whole plists, when they were read from files */
@@ -51,7 +74,14 @@ static NSString *b64encode(NSData *d)
 static NSString *newUUID(void) { CFUUIDRef u = CFUUIDCreate(NULL); NSString *s = CFBridgingRelease(CFUUIDCreateString(NULL, u)); CFRelease(u); return s; }
 static id jsonMutable(NSData *d) { return d ? [NSJSONSerialization JSONObjectWithData: d options: (NSUInteger)3 /* NSJSONReadingMutableContainers | NSJSONReadingMutableLeaves */ error: NULL] : nil; }
 static id plistMutable(NSData *d) { return d ? [NSPropertyListSerialization propertyListWithData: d options: NSPropertyListMutableContainers format: NULL error: NULL] : nil; }
-static NSData *plistBinary(id o) { return [NSPropertyListSerialization dataWithPropertyList: o format: NSPropertyListBinaryFormat_v1_0 options: 0 error: NULL]; }
+static NSData *plistBinary(id o)       /* binary like the real files: CoreFoundation's writer first (the Foundation of pearOS has none that works), then Foundation's, then XML (the real reader takes both) */
+{
+	CFErrorRef cerr = NULL; CFDataRef cd = CFPropertyListCreateData(NULL, (__bridge CFPropertyListRef)o, kCFPropertyListBinaryFormat_v1_0, 0, &cerr); if (cd) return CFBridgingRelease(cd);
+	NSError *err = nil; NSData *d = [NSPropertyListSerialization dataWithPropertyList: o format: NSPropertyListBinaryFormat_v1_0 options: 0 error: &err];
+	if (!d) { cd = CFPropertyListCreateData(NULL, (__bridge CFPropertyListRef)o, kCFPropertyListXMLFormat_v1_0, 0, &cerr); if (cd) return CFBridgingRelease(cd); }
+	if (!d && getenv("CC_TRACE")) { int fd = open("/Users/alex/cc-save.txt", O_WRONLY | O_CREAT | O_APPEND, 0644); if (fd >= 0) { dprintf(fd, "plist serialization failed: %s\n", cerr ? ((__bridge NSError *)cerr).description.UTF8String ?: "cf error" : "no error"); close(fd); } }
+	return d;
+}
 
 /* size names <-> cells */
 static BOOL cellsOfName(NSString *n, int *w, int *h)
@@ -79,6 +109,16 @@ static int chronoKindOf(NSString *b64)
 	return -1;
 }
 
+/* no layout file yet (a new account): an empty one in the real format, written at the first change */
++ (instancetype)blank
+{
+	CCBento *b = [CCBento new]; b->grid = [@{ @"width": @4, @"maxHeight": @8, @"id": [@{ @"rawValue": @0 } mutableCopy], @"elements": [NSMutableArray array], @"occupiedLocations": [NSMutableArray array], @"unoccupiedLocations": [NSMutableArray array], @"allLocations": [NSMutableArray array] } mutableCopy];
+	for (int y = 0; y < 8; y++) for (int x = 0; x < 4; x++) [b->grid[@"allLocations"] addObject: [@{ @"x": @(x), @"y": @(y) } mutableCopy]];
+	b->instanceIds = [NSMutableArray array]; b->modules = [NSMutableArray array]; b->chronoIds = [NSMutableArray array]; b->disp = [@{ @"instanceIds": b->instanceIds } mutableCopy];
+	b->box = [@{ @"menuBarIconName": @"circle.grid.2x2", @"grid": b->grid, @"displayablesData": @"" } mutableCopy]; b->boxes = [NSMutableArray arrayWithObject: b->box]; b->placed = [NSMutableArray array]; b->preserved = [NSMutableArray array];
+	NSMutableDictionary *mf = nil; NSString *mp = nil; NSData *cr = prefValue(kChronoKey, kMainDomain, NO, &mf, &mp); b->mainFile = mf; b->mainPath = mp; b->chrono = jsonMutable(cr); b->chronoControls = [b->chrono isKindOfClass: [NSMutableDictionary class]] ? b->chrono[@"Controls"] : nil;
+	return b;
+}
 + (instancetype)load
 {
 	CCBento *b = [CCBento new]; NSMutableDictionary *f = nil; NSString *p = nil;
@@ -108,15 +148,29 @@ static int chronoKindOf(NSString *b64)
 
 - (void)saveControls:(NSArray<CCControl *> *)cs
 {
+	bt("save: %ld controls, file %ld", (long)cs.count, (long)(boxFile != nil));
 	NSMutableArray *els = [NSMutableArray array]; NSMutableSet *occupied = [NSMutableSet set]; NSMutableDictionary *chById = [NSMutableDictionary dictionary];
 	for (NSDictionary *c in chronoControls) { NSString *i = [c[@"Identifier"] firstObject]; if (i) chById[i] = c; }
 	for (CCControl *c in cs) {
 		int w = [c cw], h = [c ch]; NSString *sn = nameOfCells(w, h); if (!sn) continue;
 		NSString *mid = moduleIdOf(c.kind);
 		if (!c.instanceId) {                                                   /* a control added in Edit Controls: a new instance */
-			if (!mid) continue;                                                // a chrono control cannot be created here (its identity archive is Apple's): not written
+			if (!mid) {                                                         // a chrono control (an extension): an entry of the configuration with an identity that we archive the way the real one does
+				const CCCatalogEntry *ce = CCCatalogFor(c.kind); const CCChronoControl *dc = ce && ce->chrono ? CCChronoFind(ce->chrono) : NULL; NSString *cont = dc ? @(dc->container) : nil, *ext = dc ? @(dc->extension) : nil, *nm = dc ? @(dc->name) : @(ce ? ce->title : ""), *ds = dc ? @(dc->desc) : @"";
+				if (ce && ce->chrono && !dc) {                                  // without the database (pearOS has no chronod): the extension of the well-known ones, as the real database lists them
+					static const struct { const char *prefix, *container, *extension; } ids[] = { { "com.apple.controls.display", "com.apple.controlcenter", "com.apple.controls.display" }, { "com.apple.windowmanager", "com.apple.WindowManager", "com.apple.WindowManager.controls" },
+						{ "com.apple.mobiletimer", "com.apple.clock", "com.apple.clock.WorldClockWidget" }, { "com.apple.Home", "com.apple.Home", "com.apple.Home.HomeWidget.Interactive" }, { "ShortcutsControl", "com.apple.shortcuts", "com.apple.shortcuts.ShortcutsWidget" },
+						{ "com.apple.VoiceMemos", "com.apple.VoiceMemos", "com.apple.VoiceMemos.RecordWidget" }, { "com.apple.notes", "com.apple.Notes", "com.apple.Notes.WidgetExtension" }, { "com.apple.controls.screenshot", "com.apple.screenshot.launcher", "com.apple.controls.screenshot" } };
+					for (size_t q = 0; q < sizeof ids / sizeof *ids; q++) if (!strncmp(ce->chrono, ids[q].prefix, strlen(ids[q].prefix))) { cont = @(ids[q].container); ext = @(ids[q].extension); break; }
+				}
+				NSString *arch = (cont && ext) ? identityArchive(@(ce->chrono), cont, ext) : nil; if (!arch) continue;
+				if (!chrono) { chrono = [NSMutableDictionary dictionaryWithObject: [NSMutableArray array] forKey: @"Controls"]; chronoControls = chrono[@"Controls"]; }
+				c.instanceId = newUUID();
+				[chronoControls addObject: [@{ @"OverrideSizeForMenuBar": @NO, @"ControlType": @(dc ? dc->type : (w == 1 && h == 1 ? 1 : 2)), @"DisplayName": nm, @"Identifier": [@[ c.instanceId ] mutableCopy], @"ControlIdentity": arch, @"PromptsForUserConfiguration": @NO, @"ControlDescription": ds, @"ControlSize": @(w == 1 && h == 1 ? 0 : w == 2 && h == 1 ? 1 : w == 2 && h == 2 ? 3 : 2) } mutableCopy]];
+				[chronoIds addObject: [@{ @"rawValue": c.instanceId } mutableCopy]]; [instanceIds addObject: [@{ @"rawValue": c.instanceId } mutableCopy]]; chById[c.instanceId] = [chronoControls lastObject];
+			} else {
 			c.instanceId = newUUID();
-			[modules addObject: [@{ @"id": [@{ @"rawValue": c.instanceId } mutableCopy], @"size": [@{ moduleSizeOf(w, h): [NSMutableDictionary dictionary] } mutableCopy], @"moduleId": mid } mutableCopy]]; [instanceIds addObject: [@{ @"rawValue": c.instanceId } mutableCopy]];
+			[modules addObject: [@{ @"id": [@{ @"rawValue": c.instanceId } mutableCopy], @"size": [@{ moduleSizeOf(w, h): [NSMutableDictionary dictionary] } mutableCopy], @"moduleId": mid } mutableCopy]]; [instanceIds addObject: [@{ @"rawValue": c.instanceId } mutableCopy]]; }
 		} else if (mid) for (NSMutableDictionary *m in modules) if ([m[@"id"][@"rawValue"] isEqual: c.instanceId]) m[@"size"] = [@{ moduleSizeOf(w, h): [NSMutableDictionary dictionary] } mutableCopy];
 		NSMutableDictionary *cc = chById[c.instanceId]; if (cc) cc[@"ControlSize"] = @(w == 1 && h == 1 ? 0 : w == 2 && h == 1 ? 1 : w == 2 && h == 2 ? 3 : 2);     /* 0 and 3 are seen (1x1 and 2x2); 1 and 2 are guesses */
 		[els addObject: [@{ @"size": [@{ sn: [NSMutableDictionary dictionary] } mutableCopy], @"id": [@{ @"rawValue": c.instanceId } mutableCopy], @"location": [@{ @"x": @(c.col), @"y": @(c.row) } mutableCopy] } mutableCopy]];
@@ -131,13 +185,26 @@ static int chronoKindOf(NSString *b64)
 	/* the real one lists every location of the grid in allLocations: kept (it is the same set) */
 	disp[@"modules"] = plistBinary(modules); disp[@"chronoControls"] = plistBinary(chronoIds); disp[@"instanceIds"] = instanceIds;
 	box[@"displayablesData"] = b64encode(plistBinary(disp));
-	NSData *json = [NSJSONSerialization dataWithJSONObject: boxes options: 0 error: NULL]; if (!json) return;
-	if (boxFile) { boxFile[@"boxes"] = json; [plistBinary(boxFile) writeToFile: boxPath atomically: YES]; }
+	NSData *json = [NSJSONSerialization dataWithJSONObject: boxes options: 0 error: NULL]; if (!json) { bt("save: json failed %ld %ld", 0, 0); return; }
+	bt("save: json %ld bytes, path set %ld", (long)json.length, (long)(boxPath != nil));
+	if (!boxFile && !boxPath && getenv("CC_BENTO_FILE")) { boxPath = @(getenv("CC_BENTO_FILE")); boxFile = [NSMutableDictionary dictionary]; }
+	if (!boxFile && !boxPath) {                       // a new file: through CFPreferences, and when that does not keep it (no cfprefsd) as a file of the ByHost folder
+		CFPreferencesSetValue((__bridge CFStringRef)@"boxes", (__bridge CFPropertyListRef)json, (__bridge CFStringRef)kBoxesDomain, kCFPreferencesCurrentUser, kCFPreferencesCurrentHost); CFPreferencesSynchronize((__bridge CFStringRef)kBoxesDomain, kCFPreferencesCurrentUser, kCFPreferencesCurrentHost);
+		if (!prefValue(@"boxes", kBoxesDomain, YES, NULL, NULL)) { NSString *dir = [NSHomeDirectory() stringByAppendingPathComponent: @"Library/Preferences/ByHost"]; [[NSFileManager defaultManager] createDirectoryAtPath: dir withIntermediateDirectories: YES attributes: nil error: NULL]; boxPath = [dir stringByAppendingPathComponent: @"com.apple.controlcenter.bentoboxes.00000000-0000-0000-0000-000000000001.plist"]; boxFile = [NSMutableDictionary dictionary]; }
+	}
+	if (boxFile) { boxFile[@"boxes"] = json; BOOL ok = [plistBinary(boxFile) writeToFile: boxPath atomically: YES]; bt("save: write %ld (path nil %ld)", (long)ok, (long)(boxPath == nil)); }
 	else { CFPreferencesSetValue((__bridge CFStringRef)@"boxes", (__bridge CFPropertyListRef)json, (__bridge CFStringRef)kBoxesDomain, kCFPreferencesCurrentUser, kCFPreferencesCurrentHost); CFPreferencesSynchronize((__bridge CFStringRef)kBoxesDomain, kCFPreferencesCurrentUser, kCFPreferencesCurrentHost); }
 	if (chrono) {
+		if (!mainFile && getenv("CC_CHRONO_FILE")) { mainPath = @(getenv("CC_CHRONO_FILE")); mainFile = [NSMutableDictionary dictionary]; }
 		NSData *cj = [NSJSONSerialization dataWithJSONObject: chrono options: 0 error: NULL];
 		if (cj && mainFile) { mainFile[kChronoKey] = cj; [plistBinary(mainFile) writeToFile: mainPath atomically: YES]; }
-		else if (cj) { CFPreferencesSetAppValue((__bridge CFStringRef)kChronoKey, (__bridge CFPropertyListRef)cj, (__bridge CFStringRef)kMainDomain); CFPreferencesAppSynchronize((__bridge CFStringRef)kMainDomain); }
+		else if (cj) {
+			CFPreferencesSetAppValue((__bridge CFStringRef)kChronoKey, (__bridge CFPropertyListRef)cj, (__bridge CFStringRef)kMainDomain); CFPreferencesAppSynchronize((__bridge CFStringRef)kMainDomain);
+			if (!prefValue(kChronoKey, kMainDomain, NO, NULL, NULL)) {                // cfprefsd did not keep it (pearOS): the file of the preferences
+				NSString *p = [NSHomeDirectory() stringByAppendingPathComponent: @"Library/Preferences/com.apple.controlcenter.plist"]; NSMutableDictionary *f = readFile(p) ?: [NSMutableDictionary dictionary]; f[kChronoKey] = cj;
+				[[NSFileManager defaultManager] createDirectoryAtPath: [p stringByDeletingLastPathComponent] withIntermediateDirectories: YES attributes: nil error: NULL]; [plistBinary(f) writeToFile: p atomically: YES];
+			}
+		}
 	}
 }
 @end

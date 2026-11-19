@@ -19,6 +19,8 @@ static const CGFloat kPanelY = 34, kPanelW = 308;
 static CGRect editPill(CGRect panel) { return CGRectMake(1072 + CCDX(), CGRectGetMaxY(panel) - 33, 96, 24); }          /* "Edit Controls": 502..525 in a panel ending at 533 */
 
 /* CC_STAGES=1: each stage of show() sends a harmless request to the window server (a different getter at each stage), so that the log of the Mach bridge shows how far the program got when it waits for something that never comes (stderr is not visible on pearOS) */
+/* a block after a delay on the run loop: libdispatch's own timers on the main queue did not always fire on pearOS (a fill pass stopped between two tiles, now and then the panel stayed half drawn) */
+static void ccAfter(double seconds, void (^blk)(void)) { [NSTimer scheduledTimerWithTimeInterval: seconds repeats: NO block: ^(NSTimer *t) { (void)t; blk(); }]; }
 static void ccTraceTile(NSUInteger i, int kind, int end)         /* CC_TRACE=1: the start and the end of the drawing of each tile (where a pass stops) */
 {
 	if (!getenv("CC_TRACE")) return; int fd = open("/Users/alex/cc-fill.txt", O_WRONLY | O_CREAT | O_APPEND, 0644); if (fd >= 0) { dprintf(fd, "%.3f tile %lu kind %d %s\n", CFAbsoluteTimeGetCurrent() - 800000000, (unsigned long)i, kind, end ? "done" : "start"); close(fd); }
@@ -153,7 +155,7 @@ static const CGFloat kTilePad = 4;
 /* pearOS: the commits of the tiles are Mach messages to the render server's port, whose queue holds about ten: sixteen commits in a few milliseconds lost the last ones.  The next tile waits 30 ms there (CC_NO_SYSTEM_SERVICES marks the pearOS run); on a Mac it is the next run-loop turn */
 - (void)afterTile:(void (^)(void))next
 {
-	if (getenv("CC_NO_SYSTEM_SERVICES")) dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(0.03 * NSEC_PER_SEC)), dispatch_get_main_queue(), next); else dispatch_async(dispatch_get_main_queue(), next);
+	if (getenv("CC_NO_SYSTEM_SERVICES")) ccAfter(0.03, next); else dispatch_async(dispatch_get_main_queue(), next);
 }
 - (void)fillTile:(NSUInteger)i generation:(NSUInteger)gen fade:(BOOL)fade dark:(BOOL)dark
 {
@@ -205,7 +207,7 @@ static const CGFloat kTilePad = 4;
 {
 	fillBusy = YES; tileGeneration++; NSUInteger gen = tileGeneration; __weak CCPanel *w = self;
 	void (^go)(void) = ^{ [w fillTile: 0 generation: gen fade: fade dark: dark]; };
-	if (getenv("CC_NO_SYSTEM_SERVICES")) dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(0.25 * NSEC_PER_SEC)), dispatch_get_main_queue(), go); else dispatch_async(dispatch_get_main_queue(), go);       /* pearOS: after the commit of the rebuilt layers has been taken (see afterTile) */
+	if (getenv("CC_NO_SYSTEM_SERVICES")) ccAfter(0.25, go); else dispatch_async(dispatch_get_main_queue(), go);       /* pearOS: after the commit of the rebuilt layers has been taken (see afterTile) */
 }
 - (void)applyFading:(BOOL)fade
 {

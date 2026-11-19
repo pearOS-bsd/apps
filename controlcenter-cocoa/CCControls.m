@@ -109,19 +109,11 @@ CGRect CCCellRect(int col, int row, int w, int h) { return CGRectMake(round(kX0 
 	[self resetDefaults];
 	CCBento *real = getenv("CC_LAYOUT") ? nil : [CCBento load];                    /* the layout of the real Control Center (CC_LAYOUT=real: the test layout below) */
 	if (real && real.controls.count) { bento = real; _controls = [real.controls mutableCopy]; return; }
-	CFPropertyListRef v = CFPreferencesCopyAppValue(CFSTR("pearos.CCLayout"), CFSTR("com.apple.controlcenter"));       /* our key in the real domain; the real layout is stored elsewhere (not found) */
-	if (v && CFGetTypeID(v) == CFArrayGetTypeID()) {
-		NSMutableArray *list = [NSMutableArray array];
-		for (NSDictionary *d in (__bridge NSArray *)v) { if (![d isKindOfClass: [NSDictionary class]]) continue; CCControl *c = [CCControl new]; c.kind = [d[@"k"] intValue]; c.col = [d[@"c"] intValue]; c.row = [d[@"r"] intValue]; c.w = [d[@"w"] intValue]; c.h = [d[@"h"] intValue]; if ([c entry]) [list addObject: c]; }
-		if (list.count) _controls = list;
-	}
-	if (v) CFRelease(v);
 }
 - (void)save
 {
+	if (!bento && !getenv("CC_LAYOUT")) bento = [CCBento blank];       /* a new account: the first change creates the file of the real format */
 	if (bento) { [bento saveControls: _controls]; return; }
-	NSMutableArray *a = [NSMutableArray array]; for (CCControl *c in _controls) [a addObject: @{ @"k": @(c.kind), @"c": @(c.col), @"r": @(c.row), @"w": @(c.w), @"h": @(c.h) }];
-	CFPreferencesSetAppValue(CFSTR("pearos.CCLayout"), (__bridge CFArrayRef)a, CFSTR("com.apple.controlcenter")); CFPreferencesAppSynchronize(CFSTR("com.apple.controlcenter"));
 }
 - (int)rows { int m = 0; for (CCControl *c in _controls) m = MAX(m, c.row + [c ch]); return m; }
 - (CCControl *)controlAtPoint:(CGPoint)p { for (CCControl *c in _controls) if (CGRectContainsPoint([c frame], p)) return c; return nil; }

@@ -30,3 +30,9 @@ typedef struct CGGradient *CGGradientRef;
 CGGradientRef CGGradientCreateWithColorComponents(CGColorSpaceRef space, const CGFloat *components, const CGFloat *locations, size_t count);
 void CGContextDrawLinearGradient(CGContextRef c, CGGradientRef gradient, CGPoint start, CGPoint end, uint32_t options);
 void CGGradientRelease(CGGradientRef gradient);
+
+/* keyed archiving (the open Foundation of the build lacks the class methods of the 10.13 API) */
+@interface NSKeyedArchiver (CCCompat)
++ (NSData *)archivedDataWithRootObject:(id)object requiringSecureCoding:(BOOL)requiresSecureCoding error:(NSError **)error;
++ (void)setClassName:(NSString *)codedName forClass:(Class)cls;
+@end
