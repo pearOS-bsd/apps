@@ -108,3 +108,6 @@ The list of controls: `CCChrono.{h,m}` reads chronod's `Descriptors` (type 2) wi
 
 ## Two Control Centers in the bar (2026-11-19)
 On pearOS the Mac's SystemUIServer draws a strip at the right of the bar (window of 300 x 30 at level 21: search, Control Center icon, focus, clock); our `CCStatusBar` drew a second set over it (level 25), hence two icons and a doubled clock.  With `CC_NO_STATUSBAR=1` the bar shows one set (SystemUIServer's) and the clicks on its Control Center icon still open our panel (the tap takes the frame of the item).  The image sets it (rc.d/wsbsd_macstack).
+
+## 2026-11-20: checked in the VM (headless 1920x1080, screenshots through the QEMU monitor)
+Edit Controls works in the image: the gallery window opens with its categories, suggestions and Done button, the tiles show their remove badges.  What had been wrong: (1) the Mach side never started (no Mac dyld/cache/cfprefsd/fonts in the image: wsbsd_macdeps), (2) the stack script deleted the window server's CA socket, (3) the top bar's own panel answered the click, (4) llvmpipe as GL renderer made every frame take 300 ms (software compositor now).  Open: CCDX is computed once at start, so a resized screen needs a restart of the panel; the tiles' look is not final.
