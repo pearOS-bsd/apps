@@ -7,6 +7,7 @@
  * (Sound 22); the fill is the window server's glass slot of each tile; a circle that is on is white with the icon in its colour; the circle holding an icon in AirDrop and Focus is 36 wide at (15, 14)
  * in white 24 %. Not measured: the radius of the glass blur, the battery tile's inside, the icons that have no equivalent in the symbol set (Stage Manager, True Tone, Night Shift, AirDrop) and
  * the state of Wi-Fi/Bluetooth/AirDrop/Focus here (drawn, not connected). Working: Dark Mode (the appearance key of the global preferences), Sound (mixer), Display brightness (backlight), the Wi-Fi tile (power of the first CoreWLAN interface when CoreWLAN and airportd are there). */
+#include <unistd.h>
 #import <AppKit/AppKit.h>
 #include "ws_client.h"
 #include "sls_msgids.h"
@@ -192,6 +193,7 @@ static void Bluetooth(NSPoint c, NSColor *col) { NSBezierPath *p = [NSBezierPath
 /* the panel under the item: toggled by the status area */
 void ToggleControlCenter(void)
 {
+	if (access("/var/run/wsbsd_cc_active", F_OK) == 0) return;       /* the Control Center of the Mac side (apps/controlcenter-cocoa) runs and answers the click on this item */
 	static CCWindow *w; NSRect scr = [[NSScreen mainScreen] frame];
 	if (w && [w isVisible]) { [w orderOut: nil]; return; }
 	if (!w) { double h = 660; w = [[CCWindow alloc] initWithContentRect: NSMakeRect(scr.size.width - 14 - PANEL_W, scr.size.height - 30 - h, PANEL_W, h) styleMask: NSBorderlessWindowMask backing: NSBackingStoreBuffered defer: NO];
