@@ -102,8 +102,11 @@ static NSArray *Accounts(void)
 }
 /* a rectangle given in the design's units (1920 x 1080, y from the top, the centre of the item) */
 - (NSRect)rectCX:(CGFloat)cx cy:(CGFloat)cy w:(CGFloat)w h:(CGFloat)h { return NSMakeRect(cx * sc * 1.0 - w * sc / 2 + (sf.size.width - 1920 * sc) / 2, sf.size.height - cy * sc - h * sc / 2, w * sc, h * sc); }
+/* the screen changed size (a display reconfiguration): the windows are made again for the new size */
+- (void)screenChanged:(NSNotification *)n { [win orderOut: nil]; [back orderOut: nil]; [clockWin orderOut: nil]; [self show]; }
 - (void)show
 {
+	static BOOL observing; if (!observing) { observing = YES; [[NSNotificationCenter defaultCenter] addObserver: self selector: @selector(screenChanged:) name: NSApplicationDidChangeScreenParametersNotification object: nil]; }
 	sf = [[NSScreen mainScreen] frame]; sc = MAX(0.5, sf.size.height / 1080.0);
 	win = [[LWWindow alloc] initWithContentRect: sf styleMask: NSBorderlessWindowMask backing: NSBackingStoreBuffered defer: NO]; [win setLevel: 2000]; [win setOpaque: NO]; [win setBackgroundColor: [NSColor clearColor]];
 	((LWWindow *)win)->nav = self; NSView *cv = [win contentView];

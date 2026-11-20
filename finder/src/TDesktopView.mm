@@ -28,8 +28,10 @@ static NSString *DesktopPath(void) { return [NSHomeDirectory() stringByAppending
 	_view = [[TIconView alloc] initWithFrame: [[_window contentView] bounds]]; _view->desktop = YES; _view->delegate = self; [_view setAutoresizingMask: NSViewWidthSizable | NSViewHeightSizable]; [[_window contentView] addSubview: _view];
 	[_view setMenu: [self _desktopMenu]];
 	[_view setFolder: DesktopPath()]; _volumeSig = [self _signature]; [NSTimer scheduledTimerWithTimeInterval: 2 target: self selector: @selector(_poll:) userInfo: nil repeats: YES];
-	[[NSNotificationCenter defaultCenter] addObserver: self selector: @selector(_prefs:) name: @"TFPrefsChanged" object: nil]; [_window orderBack: nil];
+	[[NSNotificationCenter defaultCenter] addObserver: self selector: @selector(_prefs:) name: @"TFPrefsChanged" object: nil]; [[NSNotificationCenter defaultCenter] addObserver: self selector: @selector(_screenChanged:) name: NSApplicationDidChangeScreenParametersNotification object: nil]; [_window orderBack: nil];
 }
+/* the screen changed size (a display reconfiguration): the desktop window covers the new screen, the wallpaper and the icon grid follow */
+- (void)_screenChanged:(NSNotification *)n { NSRect f = [[NSScreen mainScreen] frame]; if (!_window) return; [_window setFrame: f display: YES]; [self _prefs: nil]; [_view setNeedsLayout: YES]; [_view reloadKeepingSelectionOrFolder: DesktopPath()]; }
 - (void)_prefs:(NSNotification *)n { _volumeSig = nil; [self _poll: nil]; [_window setOpaque: TFWallpaperImage() != nil]; TFWriteWallpaperGrid([[NSScreen mainScreen] frame].size); [[_window contentView] setNeedsDisplay: YES]; }
 - (void)iconViewOpenItem:(NSString *)path { BOOL d = NO; [[NSFileManager defaultManager] fileExistsAtPath: path isDirectory: &d]; if (d && !TFIsPackage(path)) [TBrowserWindowController newBrowserWithPath: path]; else if (TFIsArchive(path)) { TIconView *iv = _view; TFExtractArchive(path, ^(NSString *r) { [iv reloadKeepingSelectionOrFolder: DesktopPath()]; }); } else TFOpenPath(path); }
 - (void)iconViewSelectionChanged:(NSArray *)paths { _selection = paths; if ([paths count] == 1) TFQuickLookFollow(paths[0]); }
